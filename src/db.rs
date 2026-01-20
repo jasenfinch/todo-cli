@@ -10,18 +10,23 @@ pub struct Database {
 }
 
 impl Database {
-    fn get_path() -> Result<PathBuf> {
-        let proj_dir = ProjectDirs::from("com", "Todo", "todo")
-            .context("Could not determine the local store directory")?;
-        let db_dir = proj_dir.data_dir();
+    fn get_path(path: Option<PathBuf>) -> Result<PathBuf> {
+        let db_dir = match path {
+            Some(dir) => dir,
+            None => {
+                let proj_dir = ProjectDirs::from("com", "Todo", "todo")
+                    .context("Could not determine the local store directory")?;
+                proj_dir.data_dir().to_path_buf()
+            }
+        };
 
-        fs::create_dir_all(db_dir).context("Unable to create the local store directory")?;
+        fs::create_dir_all(&db_dir).context("Unable to create the local store directory")?;
 
         Ok(db_dir.join("tasks.db"))
     }
 
-    pub fn load() -> Result<Self> {
-        let db_path = Self::get_path()?;
+    pub fn load(path: Option<PathBuf>) -> Result<Self> {
+        let db_path = Self::get_path(path)?;
         let conn = Connection::open(&db_path).context("Could not open the task database")?;
 
         let mut db = Database { conn };

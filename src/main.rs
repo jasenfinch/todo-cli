@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use todo::db::Database;
@@ -10,6 +12,9 @@ use todo::db::Database;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+    /// The path to the task database directory
+    #[arg(short = 'p')]
+    path: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -42,7 +47,7 @@ enum Commands {
 
 fn main() -> Result<()> {
     let args = Cli::parse();
-    let mut db = Database::load()?;
+    let mut db = Database::load(args.path)?;
 
     match args.command {
         Commands::List => db.list_tasks()?,
