@@ -200,18 +200,24 @@ impl Tabled for Task {
             pid = pid[0..7].to_string()
         }
 
-        let days_until = (self.deadline.unwrap() - Local::now().date_naive()).num_days();
+        let deadline = match self.deadline {
+            Some(d) => {
+                let days_until = (d - Local::now().date_naive()).num_days();
+                if days_until < 0 {
+                    format!("{} days ago", -days_until).red().to_string()
+                } else {
+                    format!("in {} days", days_until).to_string()
+                }
+            }
+            None => "".to_string(),
+        };
 
         vec![
             Cow::Borrowed(&self.id[0..7]),
             Cow::Borrowed(&self.title),
             Cow::Owned(self.desc.as_deref().unwrap_or("-").to_string()),
             Cow::Owned(difficulty_colored(&self.difficulty)),
-            Cow::Owned(if days_until < 0 {
-                format!("{} days ago", -days_until).red().to_string()
-            } else {
-                format!("in {} days", days_until).to_string()
-            }),
+            Cow::Owned(deadline),
             Cow::Owned(
                 self.tags
                     .as_ref()
