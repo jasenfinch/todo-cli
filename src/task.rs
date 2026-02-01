@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate};
 use sha1::{Digest, Sha1};
 use std::{fmt::Display, str::FromStr, time::SystemTime};
 
@@ -50,12 +50,17 @@ impl Into<u8> for Difficulty {
     }
 }
 
+#[derive(Debug)]
 pub struct Task {
     pub id: String,
     pub title: String,
     pub desc: Option<String>,
     pub difficulty: Option<Difficulty>,
     pub deadline: Option<NaiveDate>,
+    pub tags: Option<Vec<String>>,
+    pub pid: Option<String>,
+    pub created: SystemTime,
+    pub completed: bool,
 }
 
 impl Task {
@@ -64,6 +69,8 @@ impl Task {
         desc: Option<String>,
         difficulty: Option<u8>,
         deadline: Option<String>,
+        tags: Option<Vec<String>>,
+        pid: Option<String>,
     ) -> Result<Self> {
         let date = match deadline {
             Some(d) => Some(NaiveDate::parse_from_str(&d, "%Y-%m-%d")?),
@@ -81,23 +88,58 @@ impl Task {
             desc,
             difficulty,
             deadline: date,
+            tags,
+            pid,
+            created: SystemTime::now(),
+            completed: false,
         };
 
         Ok(task)
     }
 
-    pub fn translate_to_db(self) -> (String, String, Option<String>, Option<u8>, Option<String>) {
+    pub fn translate_to_db(
+        self,
+    ) -> (
+        String,
+        String,
+        Option<String>,
+        Option<u8>,
+        Option<String>,
+        Option<Vec<String>>,
+        Option<String>,
+        i64,
+        bool,
+    ) {
+        let timestamp = self
+            .created
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs() as i64;
         (
             self.id,
             self.title,
             self.desc,
             self.difficulty.map(|d| d.into()),
             self.deadline.map(|d| d.to_string()),
+            self.tags,
+            self.pid,
+            timestamp,
+            self.completed,
         )
     }
 
     pub fn translate_from_db(
-        row: (String, String, Option<String>, Option<u8>, Option<String>),
+        row: (
+            String,
+            String,
+            Option<String>,
+            Option<u8>,
+            Option<String>,
+            Option<String>,
+            i64,
+            bool,
+            Option<Vec<String>>,
+        ),
     ) -> Result<Self> {
         let diff = match row.3 {
             Some(d) => Some(Difficulty::new(d)?),
@@ -109,12 +151,19 @@ impl Task {
             None => None,
         };
 
+        let created = DateTime::from_timestamp(row.6, 0)
+            .expect("Unable to parse created time stamp from the task db");
+
         Ok(Self {
             id: row.0,
             title: row.1,
             desc: row.2,
             difficulty: diff,
             deadline,
+            tags: row.8,
+            pid: row.5,
+            created: created.into(),
+            completed: row.7,
         })
     }
 }
@@ -136,6 +185,8 @@ mod test {
             Some("test".to_string()),
             Some(4),
             Some("2026-01-23".to_string()),
+            None,
+            None,
         )
         .is_ok());
         assert!(Task::new(
@@ -143,6 +194,8 @@ mod test {
             Some("test".to_string()),
             Some(11),
             Some("2026-01-23".to_string()),
+            Some(vec!["Work".to_string()]),
+            None
         )
         .is_err());
         assert!(Task::new(
@@ -150,6 +203,8 @@ mod test {
             Some("test".to_string()),
             Some(11),
             Some("incorrect".to_string()),
+            None,
+            None
         )
         .is_err());
     }

@@ -37,6 +37,12 @@ enum Commands {
         /// The task deadline in the format YYYY-MM-DD
         #[arg(short = 'l')]
         deadline: Option<String>,
+        /// Tags associated with a task
+        #[arg(short, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+        /// The parent task id if this is a subtask
+        #[arg(long = "pid")]
+        pid: Option<String>,
     },
     #[command(about = "Remove a task")]
     Remove {
@@ -59,8 +65,10 @@ fn main() -> Result<()> {
             description,
             difficulty,
             deadline,
+            tags,
+            pid,
         } => {
-            let id = db.add(title, description, difficulty, deadline)?;
+            let id = db.add(title, description, difficulty, deadline, tags, pid)?;
             println!("Added task with ID {id}");
         }
         Commands::Remove { id } => {

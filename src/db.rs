@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Local};
 use directories::ProjectDirs;
 use rusqlite::Connection;
 use std::{fs, path::PathBuf};
@@ -36,15 +37,37 @@ impl Database {
     }
 
     fn initialize_schema(&mut self) -> Result<()> {
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS tasks (
+        self.conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 description TEXT,
                 difficulty INTEGER,
-                deadline INTEGER 
-            )",
-            [],
+                deadline INTEGER, 
+                completed BOOLEAN DEFAULT 0,
+                parent_id TEXT,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+            
+            CREATE TABLE IF NOT EXISTS tags (
+                id INTEGER PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS task_tags (
+                task_id TEXT NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (task_id, tag_id),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
+            CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
+            ",
         )?;
 
         Ok(())
@@ -65,15 +88,38 @@ impl Database {
         description: Option<String>,
         difficulty: Option<u8>,
         deadline: Option<String>,
+        tags: Option<Vec<String>>,
+        pid: Option<String>,
     ) -> Result<String> {
-        let task = Task::new(title, description, difficulty, deadline)?;
+        let task = Task::new(title, description, difficulty, deadline, tags, pid)?;
 
-        let (id, title, desc, diff, deadline) = task.translate_to_db();
+        let (id, title, desc, diff, deadline, tags, pid, created, completed) =
+            task.translate_to_db();
 
         self.conn.execute(
-            "INSERT INTO tasks (id, title, description, difficulty, deadline) VALUES (?1, ?2, ?3, ?4, ?5)",
-            (&id,title,desc,diff,deadline),
+            "INSERT INTO tasks (id, title, description, difficulty, deadline, parent_id, created_at, completed) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            (&id,title,desc,diff,deadline,pid,created,completed),
         )?;
+
+        let tags = tags.unwrap_or_default();
+
+        if !tags.is_empty() {
+            for tag in tags {
+                self.conn
+                    .execute("INSERT OR IGNORE INTO tags(name) VALUES (?1)", (&tag,))?;
+
+                let tag_id: i64 =
+                    self.conn
+                        .query_row("SELECT id FROM tags WHERE name = ?1", [&tag], |row| {
+                            row.get(0)
+                        })?;
+
+                self.conn.execute(
+                    "INSERT INTO task_tags(task_id,tag_id) VALUES (?1,?2)",
+                    (&id, tag_id),
+                )?;
+            }
+        }
 
         Ok(id[0..7].to_string())
     }
@@ -90,22 +136,43 @@ impl Database {
     fn get_tasks(&self) -> Result<Vec<Task>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, title, description, difficulty, deadline FROM tasks")?;
+            .prepare("SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed FROM tasks")?;
 
         let rows = stmt
             .query_map([], |row| {
                 Ok((
-                    row.get(0)?,
+                    row.get::<_, String>(0)?,
                     row.get(1)?,
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    None,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut tasks = Vec::new();
-        for row in rows {
+        for mut row in rows {
+            let mut stmt = self.conn.prepare(
+                "SELECT tags.name 
+                FROM tags
+                JOIN task_tags ON tags.id = task_tags.tag_id
+                WHERE task_tags.task_id = ?1
+                ORDER BY tags.name",
+            )?;
+
+            let tags = stmt
+                .query_map([row.0.clone()], |r| r.get(0))?
+                .map(|r| r.map_err(anyhow::Error::from))
+                .collect::<Result<Vec<String>, anyhow::Error>>()?;
+
+            if !tags.is_empty() {
+                row.8 = Some(tags);
+            }
+
             tasks.push(Task::translate_from_db(row)?);
         }
 
@@ -135,13 +202,31 @@ impl Database {
                 Some(d) => d.to_string(),
                 None => "".to_string(),
             };
+
+            let tags = match task.tags {
+                Some(t) => t.concat(),
+                None => "".to_string(),
+            };
+
+            let pid = match task.pid {
+                Some(p) => p.to_string(),
+                None => "".to_string(),
+            };
+
+            let datetime: DateTime<Local> = task.created.into();
+            let created = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
             println!(
-                "{} | {} | {} | {} | {}",
+                "{} | {} | {} | {} | {} | {} | {} | {} | {}",
                 &task.id[0..7].to_string(),
                 task.title,
                 desc,
                 diff,
-                deadline
+                deadline,
+                tags,
+                pid,
+                created,
+                task.completed
             );
         }
 
