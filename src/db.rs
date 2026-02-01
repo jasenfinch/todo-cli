@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Local};
 use directories::ProjectDirs;
 use rusqlite::Connection;
 use std::{fs, path::PathBuf};
+use tabled::{settings::Style, Table};
 
 use crate::task::Task;
 
@@ -93,8 +93,18 @@ impl Database {
     ) -> Result<String> {
         let task = Task::new(title, description, difficulty, deadline, tags, pid)?;
 
-        let (id, title, desc, diff, deadline, tags, pid, created, completed) =
+        let (id, title, desc, diff, deadline, tags, mut pid, created, completed) =
             task.translate_to_db();
+
+        if pid.is_some() {
+            let parent_id = pid.unwrap();
+            let pattern = format!("{parent_id}%");
+            pid = self.conn.query_row(
+                "SELECT id FROM tasks WHERE id LIKE ?1",
+                [&pattern],
+                |row| row.get(0),
+            )?;
+        }
 
         self.conn.execute(
             "INSERT INTO tasks (id, title, description, difficulty, deadline, parent_id, created_at, completed) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -187,48 +197,9 @@ impl Database {
             return Ok(());
         }
 
-        for task in tasks {
-            let desc = match task.desc {
-                Some(d) => d,
-                None => "".to_string(),
-            };
-
-            let diff = match task.difficulty {
-                Some(d) => d.to_string(),
-                None => "".to_string(),
-            };
-
-            let deadline = match task.deadline {
-                Some(d) => d.to_string(),
-                None => "".to_string(),
-            };
-
-            let tags = match task.tags {
-                Some(t) => t.concat(),
-                None => "".to_string(),
-            };
-
-            let pid = match task.pid {
-                Some(p) => p.to_string(),
-                None => "".to_string(),
-            };
-
-            let datetime: DateTime<Local> = task.created.into();
-            let created = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
-
-            println!(
-                "{} | {} | {} | {} | {} | {} | {} | {} | {}",
-                &task.id[0..7].to_string(),
-                task.title,
-                desc,
-                diff,
-                deadline,
-                tags,
-                pid,
-                created,
-                task.completed
-            );
-        }
+        let mut table = Table::new(tasks);
+        table.with(Style::psql());
+        println!("{}", table);
 
         Ok(())
     }

@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, NaiveDate};
+use chrono::{DateTime, Local, NaiveDate};
 use sha1::{Digest, Sha1};
+use std::borrow::Cow;
 use std::{fmt::Display, str::FromStr, time::SystemTime};
+use tabled::Tabled;
 
 fn generate_hash(content: &str) -> String {
     let mut hasher = Sha1::new();
@@ -165,6 +167,61 @@ impl Task {
             created: created.into(),
             completed: row.7,
         })
+    }
+}
+
+impl Tabled for Task {
+    const LENGTH: usize = 9;
+
+    fn fields(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        let created: DateTime<Local> = self.created.into();
+        let created_str = created.format("%Y-%m-%d").to_string();
+        let mut pid = self.pid.as_deref().unwrap_or("").to_string();
+
+        if pid.chars().count() > 0 {
+            pid = pid[0..7].to_string()
+        }
+
+        vec![
+            Cow::Borrowed(&self.id[0..7]),
+            Cow::Borrowed(&self.title),
+            Cow::Owned(self.desc.as_deref().unwrap_or("-").to_string()),
+            Cow::Owned(
+                self.difficulty
+                    .as_ref()
+                    .map(|d| d.to_string())
+                    .unwrap_or("".to_string()),
+            ),
+            Cow::Owned(
+                self.deadline
+                    .as_ref()
+                    .map(|d| d.to_string())
+                    .unwrap_or("".to_string()),
+            ),
+            Cow::Owned(
+                self.tags
+                    .as_ref()
+                    .map(|t| t.join(", "))
+                    .unwrap_or("".to_string()),
+            ),
+            Cow::Owned(pid),
+            Cow::Owned(created_str),
+            Cow::Owned(if self.completed { "✓" } else { "" }.to_string()),
+        ]
+    }
+
+    fn headers() -> Vec<std::borrow::Cow<'static, str>> {
+        vec![
+            Cow::Borrowed("ID"),
+            Cow::Borrowed("Title"),
+            Cow::Borrowed("Description"),
+            Cow::Borrowed("Difficulty"),
+            Cow::Borrowed("Deadline"),
+            Cow::Borrowed("Tags"),
+            Cow::Borrowed("Parent"),
+            Cow::Borrowed("Created"),
+            Cow::Borrowed("Complete"),
+        ]
     }
 }
 
