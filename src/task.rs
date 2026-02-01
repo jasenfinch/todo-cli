@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local, NaiveDate};
+use colored::Colorize;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::{fmt::Display, str::FromStr, time::SystemTime};
@@ -170,6 +171,23 @@ impl Task {
     }
 }
 
+fn difficulty_colored(difficulty: &Option<Difficulty>) -> String {
+    match difficulty {
+        None => "-".to_string(),
+        Some(d) => {
+            let val = d.value;
+            let s = val.to_string();
+            match val {
+                0..=3 => s.green().to_string(),
+                4..=6 => s.yellow().to_string(),
+                7..=8 => s.bright_red().to_string(),
+                9..=10 => s.red().bold().to_string(),
+                _ => s.to_string(),
+            }
+        }
+    }
+}
+
 impl Tabled for Task {
     const LENGTH: usize = 9;
 
@@ -182,22 +200,18 @@ impl Tabled for Task {
             pid = pid[0..7].to_string()
         }
 
+        let days_until = (self.deadline.unwrap() - Local::now().date_naive()).num_days();
+
         vec![
             Cow::Borrowed(&self.id[0..7]),
             Cow::Borrowed(&self.title),
             Cow::Owned(self.desc.as_deref().unwrap_or("-").to_string()),
-            Cow::Owned(
-                self.difficulty
-                    .as_ref()
-                    .map(|d| d.to_string())
-                    .unwrap_or("".to_string()),
-            ),
-            Cow::Owned(
-                self.deadline
-                    .as_ref()
-                    .map(|d| d.to_string())
-                    .unwrap_or("".to_string()),
-            ),
+            Cow::Owned(difficulty_colored(&self.difficulty)),
+            Cow::Owned(if days_until < 0 {
+                format!("{} days ago", -days_until).red().to_string()
+            } else {
+                format!("in {} days", days_until).to_string()
+            }),
             Cow::Owned(
                 self.tags
                     .as_ref()

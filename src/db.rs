@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use rusqlite::Connection;
 use std::{fs, path::PathBuf};
-use tabled::{settings::Style, Table};
+use tabled::{
+    settings::{formatting::AlignmentStrategy, Style},
+    Table,
+};
 
 use crate::task::Task;
 
@@ -198,7 +201,7 @@ impl Database {
         }
 
         let mut table = Table::new(tasks);
-        table.with(Style::psql());
+        table.with(Style::psql()).with(AlignmentStrategy::PerLine);
         println!("{}", table);
 
         Ok(())
