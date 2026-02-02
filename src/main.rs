@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use todo::db::Database;
+use todo::{db::Database, display};
 
 /// A Todo list CLI
 #[derive(Debug, Parser)]
@@ -19,8 +19,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    #[command(about = "List all tasks")]
-    List,
+    #[command(about = "List tasks")]
+    List {
+        #[arg(short, long, default_value = "compact")]
+        view: display::ViewMode,
+    },
     #[command(about = "Clear all tasks")]
     Clear,
     #[command(about = "Add a task")]
@@ -56,7 +59,7 @@ fn main() -> Result<()> {
     let mut db = Database::load(args.path)?;
 
     match args.command {
-        Commands::List => db.list_tasks()?,
+        Commands::List { view } => display::list_tasks(db, view)?,
         Commands::Clear => {
             db.clear()?;
         }

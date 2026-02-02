@@ -2,15 +2,11 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use rusqlite::Connection;
 use std::{fs, path::PathBuf};
-use tabled::{
-    settings::{formatting::AlignmentStrategy, Style},
-    Table,
-};
 
 use crate::task::Task;
 
 pub struct Database {
-    conn: Connection,
+    pub conn: Connection,
 }
 
 impl Database {
@@ -146,7 +142,7 @@ impl Database {
         Ok(n)
     }
 
-    fn get_tasks(&self) -> Result<Vec<Task>> {
+    pub fn get_tasks(&self) -> Result<Vec<Task>> {
         let mut stmt = self
             .conn
             .prepare("SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed FROM tasks")?;
@@ -190,20 +186,5 @@ impl Database {
         }
 
         Ok(tasks)
-    }
-
-    pub fn list_tasks(&self) -> Result<()> {
-        let tasks = self.get_tasks()?;
-
-        if tasks.is_empty() {
-            println!("No tasks found.");
-            return Ok(());
-        }
-
-        let mut table = Table::new(tasks);
-        table.with(Style::psql()).with(AlignmentStrategy::PerLine);
-        println!("{}", table);
-
-        Ok(())
     }
 }
