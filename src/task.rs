@@ -26,7 +26,7 @@ fn generate_content_hash(title: &str) -> String {
     generate_hash(&content)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Difficulty {
     value: u8,
 }
@@ -81,7 +81,7 @@ impl Display for Task {
         }
 
         if let Some(diff) = &self.difficulty {
-            writeln!(f, "  Difficulty: {}/10", diff.value)?;
+            writeln!(f, "  Difficulty: {}/10", difficulty_colored(&Some(*diff)))?;
         }
 
         if let Some(deadline) = &self.deadline {
