@@ -28,8 +28,8 @@ enum Commands {
     Clear,
     #[command(about = "Add a task")]
     Add {
-        /// The task title
-        #[arg(value_name = "TITLE")]
+        /// The name of the task
+        #[arg(value_name = "TASK")]
         title: String,
         /// A description of the task
         #[arg(short)]
@@ -44,7 +44,7 @@ enum Commands {
         #[arg(short, value_delimiter = ',')]
         tags: Option<Vec<String>>,
         /// The parent task id if this is a subtask
-        #[arg(long = "pid")]
+        #[arg(short, long)]
         pid: Option<String>,
     },
     #[command(about = "Remove a task")]
