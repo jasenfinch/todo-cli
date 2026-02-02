@@ -23,6 +23,8 @@ enum Commands {
     List {
         #[arg(short, long, default_value = "compact")]
         view: display::ViewMode,
+        #[arg(short, long, value_delimiter = ',', conflicts_with = "view")]
+        columns: Option<Vec<display::Column>>,
     },
     #[command(about = "Clear all tasks")]
     Clear,
@@ -59,7 +61,7 @@ fn main() -> Result<()> {
     let mut db = Database::load(args.path)?;
 
     match args.command {
-        Commands::List { view } => display::list_tasks(db, view)?,
+        Commands::List { view, columns } => display::list_tasks(db, view, columns)?,
         Commands::Clear => {
             db.clear()?;
         }

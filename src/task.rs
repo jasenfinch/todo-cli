@@ -233,7 +233,7 @@ impl Tabled for Task {
     fn headers() -> Vec<std::borrow::Cow<'static, str>> {
         vec![
             Cow::Borrowed("ID"),
-            Cow::Borrowed("Title"),
+            Cow::Borrowed("Task"),
             Cow::Borrowed("Description"),
             Cow::Borrowed("Difficulty"),
             Cow::Borrowed("Deadline"),
