@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local, NaiveDate};
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Input, Select};
+use dialoguer::{theme::ColorfulTheme, Input};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::{fmt::Display, str::FromStr, time::SystemTime};
@@ -149,12 +149,10 @@ impl Task {
     pub fn interactive() -> Result<Self> {
         let theme = ColorfulTheme::default();
 
-        // Required field
         let title: String = Input::with_theme(&theme)
-            .with_prompt("Task title")
+            .with_prompt("Task")
             .interact_text()?;
 
-        // Optional description
         let desc: Option<String> = Input::with_theme(&theme)
             .with_prompt("Description (optional)")
             .allow_empty(true)
@@ -162,28 +160,25 @@ impl Task {
             .ok()
             .filter(|s: &String| !s.is_empty());
 
-        // Difficulty selection
-        let difficulties = &[
-            "0 (Easy)",
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "10 (Hard)",
-        ];
-        let difficulty_idx = Select::with_theme(&theme)
-            .with_prompt("Difficulty")
-            .items(difficulties)
-            .default(5)
-            .interact_opt()?
-            .map(|i| i as u8);
+        let difficulty = Input::with_theme(&theme)
+            .with_prompt("Difficulty (0-10, optional)")
+            .allow_empty(true)
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.is_empty() {
+                    return Ok(());
+                }
 
-        // Deadline
+                match input.parse::<u8>() {
+                    Ok(n) if n <= 10 => Ok(()),
+                    Ok(_) => Err("Difficulty must be between 0 and 10"),
+                    Err(_) => Err("Please enter a valid number"),
+                }
+            })
+            .interact_text()
+            .ok()
+            .filter(|s: &String| !s.is_empty())
+            .and_then(|s| s.parse().ok());
+
         let deadline: Option<String> = Input::with_theme(&theme)
             .with_prompt("Deadline (DD-MM-YYYY, optional)")
             .allow_empty(true)
@@ -191,7 +186,6 @@ impl Task {
             .ok()
             .filter(|s: &String| !s.is_empty());
 
-        // Tags
         let tags_str: Option<String> = Input::with_theme(&theme)
             .with_prompt("Tags (comma-separated, optional)")
             .allow_empty(true)
@@ -208,7 +202,7 @@ impl Task {
             .ok()
             .filter(|s: &String| !s.is_empty());
 
-        let task = Task::new(title, desc, difficulty_idx, deadline, tags, pid)?;
+        let task = Task::new(title, desc, difficulty, deadline, tags, pid)?;
         Ok(task)
     }
 
@@ -305,7 +299,11 @@ fn days_until(d: &NaiveDate) -> String {
     if days_until < 0 {
         format!("{} days ago", -days_until).red().to_string()
     } else {
-        format!("in {} days", days_until).to_string()
+        let mut res = format!("in {} days", days_until).to_string();
+        if res == "in 0 days" {
+            res = res.red().to_string()
+        }
+        res
     }
 }
 
@@ -327,7 +325,6 @@ impl Tabled for Task {
         };
 
         vec![
-            Cow::Borrowed(&self.id[0..7]),
             Cow::Borrowed(&self.title),
             Cow::Owned(self.desc.as_deref().unwrap_or("").to_string()),
             Cow::Owned(difficulty_colored(&self.difficulty)),
@@ -338,6 +335,7 @@ impl Tabled for Task {
                     .map(|t| t.join(", "))
                     .unwrap_or("".to_string()),
             ),
+            Cow::Borrowed(&self.id[0..7]),
             Cow::Owned(pid),
             Cow::Owned(created_str),
             Cow::Owned(if self.completed { "✓" } else { "" }.to_string()),
@@ -346,12 +344,12 @@ impl Tabled for Task {
 
     fn headers() -> Vec<std::borrow::Cow<'static, str>> {
         vec![
-            Cow::Borrowed("ID"),
             Cow::Borrowed("Task"),
             Cow::Borrowed("Description"),
             Cow::Borrowed("Difficulty"),
             Cow::Borrowed("Deadline"),
             Cow::Borrowed("Tags"),
+            Cow::Borrowed("ID"),
             Cow::Borrowed("Parent"),
             Cow::Borrowed("Created"),
             Cow::Borrowed("Complete"),

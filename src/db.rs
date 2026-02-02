@@ -138,11 +138,15 @@ impl Database {
     }
 
     pub fn next(&self) -> Result<Task> {
+        // WHERE completed = 0 AND deadline IS NOT NULL
         let mut stmt = self.conn.prepare(
             "SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed
          FROM tasks
-         WHERE completed = 0 AND deadline IS NOT NULL
-         ORDER BY difficulty DESC, deadline ASC
+         WHERE completed = 0
+         ORDER BY 
+            CASE WHEN deadline IS NULL THEN 1 ELSE 0 END,  
+            deadline ASC,
+            difficulty DESC
          LIMIT 1",
         )?;
 
@@ -211,7 +215,8 @@ impl Database {
                         row.get(7)?,
                         None,
                     ))
-                })?;
+                })
+        .context(format!("No task found matching ID '{}'", id))?;
 
         let tags = self.get_tags(&row.0)?;
         if !tags.is_empty() {
@@ -224,7 +229,15 @@ impl Database {
     pub fn get_tasks(&self) -> Result<Vec<Task>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed FROM tasks")?;
+            .prepare("
+                SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed
+                FROM tasks
+                WHERE completed = 0
+                ORDER BY 
+                    CASE WHEN deadline IS NULL THEN 1 ELSE 0 END,  
+                    deadline ASC,
+                    difficulty DESC
+                ")?;
 
         let rows = stmt
             .query_map([], |row| {

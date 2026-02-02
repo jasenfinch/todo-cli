@@ -21,5 +21,8 @@ fn test_todo() {
     cmd.arg("-p").arg(temp_path).arg("list").assert().success();
 
     let mut cmd = Command::new(cargo::cargo_bin!());
+    cmd.arg("-p").arg(temp_path).arg("next").assert().success();
+
+    let mut cmd = Command::new(cargo::cargo_bin!());
     cmd.arg("-p").arg(temp_path).arg("clear").assert().success();
 }

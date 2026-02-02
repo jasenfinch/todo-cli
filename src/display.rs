@@ -89,7 +89,7 @@ pub fn list_tasks(db: Database, view: ViewMode, columns: Option<Vec<Column>>) ->
     }
 
     let mut table = Table::new(tasks);
-    table.with(Style::psql()).with(AlignmentStrategy::PerLine);
+    table.with(Style::modern()).with(AlignmentStrategy::PerLine);
 
     if columns.is_some() {
         let columns: Vec<&str> = columns
