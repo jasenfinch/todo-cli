@@ -1,3 +1,3 @@
 pub mod db;
 pub mod display;
-mod task;
+pub mod task;

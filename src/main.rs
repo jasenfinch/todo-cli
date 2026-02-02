@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use todo::{db::Database, display};
+use todo::{db::Database, display, task::Task};
 
 /// A Todo list CLI
 #[derive(Debug, Parser)]
@@ -19,27 +19,18 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    #[command(about = "List tasks")]
-    List {
-        #[arg(short, long, default_value = "compact")]
-        view: display::ViewMode,
-        #[arg(short, long, value_delimiter = ',', conflicts_with = "view")]
-        columns: Option<Vec<display::Column>>,
-    },
-    #[command(about = "Clear all tasks")]
-    Clear,
     #[command(about = "Add a task")]
     Add {
         /// The name of the task
         #[arg(value_name = "TASK")]
-        title: String,
+        title: Option<String>,
         /// A description of the task
         #[arg(short)]
         description: Option<String>,
         /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
         #[arg(short = 'D')]
         difficulty: Option<u8>,
-        /// The task deadline in the format YYYY-MM-DD
+        /// The task deadline in the format DD-MM-YYYY
         #[arg(short = 'l')]
         deadline: Option<String>,
         /// Tags associated with a task
@@ -49,11 +40,26 @@ enum Commands {
         #[arg(short, long)]
         pid: Option<String>,
     },
+    #[command(about = "Show information about a task")]
+    Show { id: String },
+    #[command(about = "Show the next task")]
+    Next,
+    #[command(about = "Mark a task as complete")]
+    Complete { id: String },
+    #[command(about = "List tasks")]
+    List {
+        #[arg(short, long, default_value = "compact")]
+        view: display::ViewMode,
+        #[arg(short, long, value_delimiter = ',', conflicts_with = "view")]
+        columns: Option<Vec<display::Column>>,
+    },
     #[command(about = "Remove a task")]
     Remove {
         #[arg(value_name = "ID")]
         id: String,
     },
+    #[command(about = "Clear all tasks")]
+    Clear,
 }
 
 fn main() -> Result<()> {
@@ -61,10 +67,6 @@ fn main() -> Result<()> {
     let mut db = Database::load(args.path)?;
 
     match args.command {
-        Commands::List { view, columns } => display::list_tasks(db, view, columns)?,
-        Commands::Clear => {
-            db.clear()?;
-        }
         Commands::Add {
             title,
             description,
@@ -73,12 +75,34 @@ fn main() -> Result<()> {
             tags,
             pid,
         } => {
-            let id = db.add(title, description, difficulty, deadline, tags, pid)?;
+            let task: Task;
+            if let Some(t) = title {
+                task = Task::new(t, description, difficulty, deadline, tags, pid)?;
+            } else {
+                task = Task::interactive()?;
+            }
+            let id = db.add(task)?;
             println!("Added task with ID {id}");
         }
+        Commands::Show { id } => {
+            let task = db.get_task(id)?;
+            println!("{}", task)
+        }
+        Commands::Next => {
+            let task = db.next()?;
+            println!("{}", task)
+        }
+        Commands::Complete { id } => {
+            let id = db.completed(id)?;
+            println!("Task with ID {id} marked as complete");
+        }
+        Commands::List { view, columns } => display::list_tasks(db, view, columns)?,
         Commands::Remove { id } => {
             let n = db.remove(id)?;
             println!("Removed {n} tasks")
+        }
+        Commands::Clear => {
+            db.clear()?;
         }
     };
 

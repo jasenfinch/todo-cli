@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
 use rusqlite::Connection;
 use std::{fs, path::PathBuf};
@@ -81,17 +81,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn add(
-        &mut self,
-        title: String,
-        description: Option<String>,
-        difficulty: Option<u8>,
-        deadline: Option<String>,
-        tags: Option<Vec<String>>,
-        pid: Option<String>,
-    ) -> Result<String> {
-        let task = Task::new(title, description, difficulty, deadline, tags, pid)?;
-
+    pub fn add(&mut self, task: Task) -> Result<String> {
         let (id, title, desc, diff, deadline, tags, mut pid, created, completed) =
             task.translate_to_db();
 
@@ -133,6 +123,52 @@ impl Database {
         Ok(id[0..7].to_string())
     }
 
+    pub fn completed(&mut self, id: String) -> Result<String> {
+        let pattern = format!("{}%", id);
+        let n = self.conn.execute(
+            "UPDATE tasks SET completed = 1 WHERE id LIKE ?1",
+            [&pattern],
+        )?;
+
+        if n == 0 {
+            bail!("No task found matching '{}'", id);
+        }
+
+        Ok(id)
+    }
+
+    pub fn next(&self) -> Result<Task> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed
+         FROM tasks
+         WHERE completed = 0 AND deadline IS NOT NULL
+         ORDER BY difficulty DESC, deadline ASC
+         LIMIT 1",
+        )?;
+
+        let mut row = stmt.query_row([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                None,
+            ))
+        })?;
+
+        let tags = self.get_tags(&row.0)?;
+        if !tags.is_empty() {
+            row.8 = Some(tags);
+        }
+        let task = Task::translate_from_db(row)?;
+
+        Ok(task)
+    }
+
     pub fn remove(&mut self, id: String) -> Result<usize> {
         let pattern = format!("{id}%");
         let n = self
@@ -140,6 +176,49 @@ impl Database {
             .execute("DELETE FROM tasks WHERE id LIKE ?1", [&pattern])?;
 
         Ok(n)
+    }
+
+    fn get_tags(&self, id: &String) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tags.name 
+                FROM tags
+                JOIN task_tags ON tags.id = task_tags.tag_id
+                WHERE task_tags.task_id = ?1
+                ORDER BY tags.name",
+        )?;
+
+        let tags = stmt
+            .query_map([id], |r| r.get(0))?
+            .map(|r| r.map_err(anyhow::Error::from))
+            .collect::<Result<Vec<String>, anyhow::Error>>()?;
+
+        Ok(tags)
+    }
+
+    pub fn get_task(&self, id: String) -> Result<Task> {
+        let pattern = format!("{id}%");
+        let mut row =
+            self.conn
+                .query_row("SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed FROM tasks WHERE id LIKE ?1", [&pattern], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                        row.get(7)?,
+                        None,
+                    ))
+                })?;
+
+        let tags = self.get_tags(&row.0)?;
+        if !tags.is_empty() {
+            row.8 = Some(tags);
+        }
+
+        Task::translate_from_db(row)
     }
 
     pub fn get_tasks(&self) -> Result<Vec<Task>> {
@@ -165,19 +244,7 @@ impl Database {
 
         let mut tasks = Vec::new();
         for mut row in rows {
-            let mut stmt = self.conn.prepare(
-                "SELECT tags.name 
-                FROM tags
-                JOIN task_tags ON tags.id = task_tags.tag_id
-                WHERE task_tags.task_id = ?1
-                ORDER BY tags.name",
-            )?;
-
-            let tags = stmt
-                .query_map([row.0.clone()], |r| r.get(0))?
-                .map(|r| r.map_err(anyhow::Error::from))
-                .collect::<Result<Vec<String>, anyhow::Error>>()?;
-
+            let tags = self.get_tags(&row.0)?;
             if !tags.is_empty() {
                 row.8 = Some(tags);
             }

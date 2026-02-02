@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local, NaiveDate};
 use colored::Colorize;
+use dialoguer::{theme::ColorfulTheme, Input, Select};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::{fmt::Display, str::FromStr, time::SystemTime};
@@ -66,6 +67,51 @@ pub struct Task {
     pub completed: bool,
 }
 
+impl Display for Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "{} Task: {}",
+            if self.completed { "✓" } else { "☐" },
+            self.title
+        )?;
+
+        if let Some(desc) = &self.desc {
+            writeln!(f, "  Description: {}", desc)?;
+        }
+
+        if let Some(diff) = &self.difficulty {
+            writeln!(f, "  Difficulty: {}/10", diff.value)?;
+        }
+
+        if let Some(deadline) = &self.deadline {
+            writeln!(
+                f,
+                "  Deadline: {} ({})",
+                deadline.format("%d-%m-%Y"),
+                days_until(deadline)
+            )?;
+        }
+
+        if let Some(tags) = &self.tags {
+            if !tags.is_empty() {
+                writeln!(f, "  Tags: {}", tags.join(", "))?;
+            }
+        }
+
+        writeln!(f, "  ID: {}", self.id)?;
+
+        if let Some(pid) = &self.pid {
+            writeln!(f, "  Parent: {}", pid)?;
+        }
+
+        let created: DateTime<Local> = self.created.into();
+        writeln!(f, "  Created: {}", created.format("%H:%M:%S %d-%m-%Y"))?;
+
+        Ok(())
+    }
+}
+
 impl Task {
     pub fn new(
         title: String,
@@ -76,7 +122,7 @@ impl Task {
         pid: Option<String>,
     ) -> Result<Self> {
         let date = match deadline {
-            Some(d) => Some(NaiveDate::parse_from_str(&d, "%Y-%m-%d")?),
+            Some(d) => Some(NaiveDate::parse_from_str(&d, "%d-%m-%Y")?),
             None => None,
         };
 
@@ -97,6 +143,72 @@ impl Task {
             completed: false,
         };
 
+        Ok(task)
+    }
+
+    pub fn interactive() -> Result<Self> {
+        let theme = ColorfulTheme::default();
+
+        // Required field
+        let title: String = Input::with_theme(&theme)
+            .with_prompt("Task title")
+            .interact_text()?;
+
+        // Optional description
+        let desc: Option<String> = Input::with_theme(&theme)
+            .with_prompt("Description (optional)")
+            .allow_empty(true)
+            .interact_text()
+            .ok()
+            .filter(|s: &String| !s.is_empty());
+
+        // Difficulty selection
+        let difficulties = &[
+            "0 (Easy)",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10 (Hard)",
+        ];
+        let difficulty_idx = Select::with_theme(&theme)
+            .with_prompt("Difficulty")
+            .items(difficulties)
+            .default(5)
+            .interact_opt()?
+            .map(|i| i as u8);
+
+        // Deadline
+        let deadline: Option<String> = Input::with_theme(&theme)
+            .with_prompt("Deadline (DD-MM-YYYY, optional)")
+            .allow_empty(true)
+            .interact_text()
+            .ok()
+            .filter(|s: &String| !s.is_empty());
+
+        // Tags
+        let tags_str: Option<String> = Input::with_theme(&theme)
+            .with_prompt("Tags (comma-separated, optional)")
+            .allow_empty(true)
+            .interact_text()
+            .ok()
+            .filter(|s: &String| !s.is_empty());
+
+        let tags = tags_str.map(|s| s.split(',').map(|t| t.trim().to_string()).collect());
+
+        let pid: Option<String> = Input::with_theme(&theme)
+            .with_prompt("Parent task ID (optional)")
+            .allow_empty(true)
+            .interact_text()
+            .ok()
+            .filter(|s: &String| !s.is_empty());
+
+        let task = Task::new(title, desc, difficulty_idx, deadline, tags, pid)?;
         Ok(task)
     }
 
@@ -173,7 +285,7 @@ impl Task {
 
 fn difficulty_colored(difficulty: &Option<Difficulty>) -> String {
     match difficulty {
-        None => "-".to_string(),
+        None => "".to_string(),
         Some(d) => {
             let val = d.value;
             let s = val.to_string();
@@ -188,12 +300,21 @@ fn difficulty_colored(difficulty: &Option<Difficulty>) -> String {
     }
 }
 
+fn days_until(d: &NaiveDate) -> String {
+    let days_until = (*d - Local::now().date_naive()).num_days();
+    if days_until < 0 {
+        format!("{} days ago", -days_until).red().to_string()
+    } else {
+        format!("in {} days", days_until).to_string()
+    }
+}
+
 impl Tabled for Task {
     const LENGTH: usize = 9;
 
     fn fields(&self) -> Vec<std::borrow::Cow<'_, str>> {
         let created: DateTime<Local> = self.created.into();
-        let created_str = created.format("%Y-%m-%d").to_string();
+        let created_str = created.format("%d-%m-%Y").to_string();
         let mut pid = self.pid.as_deref().unwrap_or("").to_string();
 
         if pid.chars().count() > 0 {
@@ -201,21 +322,14 @@ impl Tabled for Task {
         }
 
         let deadline = match self.deadline {
-            Some(d) => {
-                let days_until = (d - Local::now().date_naive()).num_days();
-                if days_until < 0 {
-                    format!("{} days ago", -days_until).red().to_string()
-                } else {
-                    format!("in {} days", days_until).to_string()
-                }
-            }
+            Some(d) => days_until(&d),
             None => "".to_string(),
         };
 
         vec![
             Cow::Borrowed(&self.id[0..7]),
             Cow::Borrowed(&self.title),
-            Cow::Owned(self.desc.as_deref().unwrap_or("-").to_string()),
+            Cow::Owned(self.desc.as_deref().unwrap_or("").to_string()),
             Cow::Owned(difficulty_colored(&self.difficulty)),
             Cow::Owned(deadline),
             Cow::Owned(
@@ -261,7 +375,7 @@ mod test {
             "test".to_string(),
             Some("test".to_string()),
             Some(4),
-            Some("2026-01-23".to_string()),
+            Some("23-01-2026".to_string()),
             None,
             None,
         )
@@ -270,7 +384,7 @@ mod test {
             "test".to_string(),
             Some("test".to_string()),
             Some(11),
-            Some("2026-01-23".to_string()),
+            Some("23-01-2026".to_string()),
             Some(vec!["Work".to_string()]),
             None
         )
