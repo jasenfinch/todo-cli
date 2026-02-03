@@ -7,7 +7,7 @@ use todo::{db::Database, display, task::Task};
 /// A Todo list CLI
 #[derive(Debug, Parser)]
 #[command(name = "todo")]
-#[command(about = "A todo list CLI", long_about = None)]
+#[command(about = "A task management and productivity CLI tool", long_about = None)]
 #[command(arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
@@ -25,27 +25,27 @@ enum Commands {
         #[arg(value_name = "TASK")]
         title: Option<String>,
         /// A description of the task
-        #[arg(short)]
+        #[arg(short, long = "desc")]
         description: Option<String>,
         /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
-        #[arg(short = 'D')]
+        #[arg(short = 'D', long = "diff")]
         difficulty: Option<u8>,
         /// The task deadline in the format DD-MM-YYYY
-        #[arg(short = 'l')]
+        #[arg(short = 'l', long)]
         deadline: Option<String>,
         /// Tags associated with a task
-        #[arg(short, value_delimiter = ',')]
+        #[arg(short, long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
         /// The parent task id if this is a subtask
-        #[arg(short, long)]
+        #[arg(short, long, value_name = "PARENT_ID")]
         pid: Option<String>,
     },
-    #[command(about = "Show information about a task")]
-    Show { id: String },
-    #[command(about = "Show the next task")]
-    Next,
     #[command(about = "Mark a task as complete")]
     Complete { id: String },
+    #[command(about = "Show the next task to undertake based on task difficulty and deadline")]
+    Next,
+    #[command(about = "Show information about a task")]
+    Show { id: String },
     #[command(about = "List tasks")]
     List {
         #[arg(short, long, default_value = "compact")]
@@ -84,17 +84,17 @@ fn main() -> Result<()> {
             let id = db.add(task)?;
             println!("Added task with ID {id}");
         }
-        Commands::Show { id } => {
-            let task = db.get_task(id)?;
-            println!("{}", task)
+        Commands::Complete { id } => {
+            let id = db.completed(id)?;
+            println!("Task with ID {id} marked as complete");
         }
         Commands::Next => {
             let task = db.next()?;
             println!("{}", task)
         }
-        Commands::Complete { id } => {
-            let id = db.completed(id)?;
-            println!("Task with ID {id} marked as complete");
+        Commands::Show { id } => {
+            let task = db.get_task(id)?;
+            println!("{}", task)
         }
         Commands::List { view, columns } => display::list_tasks(db, view, columns)?,
         Commands::Remove { id } => {
