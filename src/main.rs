@@ -24,18 +24,53 @@ enum Commands {
         /// The name of the task
         #[arg(value_name = "TASK")]
         title: Option<String>,
+
         /// A description of the task
         #[arg(short, long = "desc")]
         description: Option<String>,
+
         /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
         #[arg(short = 'D', long = "diff")]
         difficulty: Option<u8>,
-        /// The task deadline in the format DD-MM-YYYY
+
         #[arg(short = 'l', long)]
+        #[arg(long_help = r#"Deadline for the task
+
+Supported formats:
+  Keywords:
+    today               - Today's date
+    tomorrow, tmr       - Tomorrow
+    monday, mon         - Next Monday (or any weekday)
+    
+  Relative:
+    +5d, 5d             - 5 days from now
+    +2w, 2weeks         - 2 weeks from now
+    +1m, 1month         - 1 month from now
+    
+  Special:
+    eow, endofweek      - End of current week (Sunday)
+    eom, endofmonth     - Last day of current month
+    eoy, endofyear      - December 31st
+    
+  Exact dates:
+    2026-02-10          - ISO format (YYYY-MM-DD)
+    02/10/2026          - UK format (DD/MM/YYYY)
+    10-02-2026          - US format (MM-DD-YYYY)
+    
+  Examples:
+    --deadline today
+    --deadline friday
+    --deadline +5d
+    --deadline 2026-12-31"#)]
         deadline: Option<String>,
-        /// Tags associated with a task
+
         #[arg(short, long, value_delimiter = ',')]
+        #[arg(long_help = r#"Tags associated with a task
+  Examples:
+    --tags work
+    --tags work,project"#)]
         tags: Option<Vec<String>>,
+
         /// The parent task id if this is a subtask
         #[arg(short, long, value_name = "PARENT_ID")]
         pid: Option<String>,

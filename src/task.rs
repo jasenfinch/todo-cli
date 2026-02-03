@@ -1,10 +1,11 @@
+use crate::deadline::Deadline;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Local, NaiveDate};
+use chrono::{DateTime, Local};
 use colored::Colorize;
 use dialoguer::{theme::ColorfulTheme, Input};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
-use std::{fmt::Display, str::FromStr, time::SystemTime};
+use std::{fmt::Display, time::SystemTime};
 use tabled::Tabled;
 
 fn generate_hash(content: &str) -> String {
@@ -33,9 +34,10 @@ pub struct Difficulty {
 
 impl Display for Difficulty {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
+        write!(f, "{}", self.colour())
     }
 }
+
 impl Difficulty {
     fn new(value: u8) -> Result<Self> {
         if (0..=10).contains(&value) {
@@ -45,6 +47,24 @@ impl Difficulty {
                 "Difficulty value out of range. The value should be between 0 and 10.",
             ))
         }
+    }
+
+    fn colour(&self) -> String {
+        let val = self.value;
+        let s = val.to_string();
+        match val {
+            0..=3 => s.green().to_string(),
+            4..=6 => s.yellow().to_string(),
+            7..=8 => s.bright_red().to_string(),
+            9..=10 => s.red().bold().to_string(),
+            _ => s.to_string(),
+        }
+    }
+}
+
+impl From<u8> for Difficulty {
+    fn from(value: u8) -> Self {
+        Self { value }
     }
 }
 
@@ -60,7 +80,7 @@ pub struct Task {
     pub title: String,
     pub desc: Option<String>,
     pub difficulty: Option<Difficulty>,
-    pub deadline: Option<NaiveDate>,
+    pub deadline: Option<Deadline>,
     pub tags: Option<Vec<String>>,
     pub pid: Option<String>,
     pub created: SystemTime,
@@ -81,16 +101,11 @@ impl Display for Task {
         }
 
         if let Some(diff) = &self.difficulty {
-            writeln!(f, "  Difficulty: {}/10", difficulty_colored(&Some(*diff)))?;
+            writeln!(f, "  Difficulty: {}", diff)?;
         }
 
         if let Some(deadline) = &self.deadline {
-            writeln!(
-                f,
-                "  Deadline: {} ({})",
-                deadline.format("%d-%m-%Y"),
-                days_until(deadline)
-            )?;
+            writeln!(f, "  Deadline: {} ({})", deadline, deadline.days_until())?;
         }
 
         if let Some(tags) = &self.tags {
@@ -122,7 +137,7 @@ impl Task {
         pid: Option<String>,
     ) -> Result<Self> {
         let date = match deadline {
-            Some(d) => Some(NaiveDate::parse_from_str(&d, "%d-%m-%Y")?),
+            Some(d) => Some(Deadline::parse(&d)?),
             None => None,
         };
 
@@ -182,6 +197,16 @@ impl Task {
         let deadline: Option<String> = Input::with_theme(&theme)
             .with_prompt("Deadline (DD-MM-YYYY, optional)")
             .allow_empty(true)
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.is_empty() {
+                    return Ok(());
+                }
+
+                match Deadline::parse(input) {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err("Invalid deadline format. Use: today, tomorrow, monday, +5d, 2026-02-10, etc. See `todo add --help` for more information."),
+                }
+            })
             .interact_text()
             .ok()
             .filter(|s: &String| !s.is_empty());
@@ -224,6 +249,7 @@ impl Task {
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs() as i64;
+
         (
             self.id,
             self.title,
@@ -256,7 +282,7 @@ impl Task {
         };
 
         let deadline = match row.4 {
-            Some(d) => Some(NaiveDate::from_str(&d)?),
+            Some(d) => Some(Deadline::parse(&d)?),
             None => None,
         };
 
@@ -277,36 +303,6 @@ impl Task {
     }
 }
 
-fn difficulty_colored(difficulty: &Option<Difficulty>) -> String {
-    match difficulty {
-        None => "".to_string(),
-        Some(d) => {
-            let val = d.value;
-            let s = val.to_string();
-            match val {
-                0..=3 => s.green().to_string(),
-                4..=6 => s.yellow().to_string(),
-                7..=8 => s.bright_red().to_string(),
-                9..=10 => s.red().bold().to_string(),
-                _ => s.to_string(),
-            }
-        }
-    }
-}
-
-fn days_until(d: &NaiveDate) -> String {
-    let days_until = (*d - Local::now().date_naive()).num_days();
-    if days_until < 0 {
-        format!("{} days ago", -days_until).red().to_string()
-    } else {
-        let mut res = format!("in {} days", days_until).to_string();
-        if res == "in 0 days" {
-            res = res.red().to_string()
-        }
-        res
-    }
-}
-
 impl Tabled for Task {
     const LENGTH: usize = 9;
 
@@ -319,15 +315,20 @@ impl Tabled for Task {
             pid = pid[0..7].to_string()
         }
 
-        let deadline = match self.deadline {
-            Some(d) => days_until(&d),
+        let deadline = match &self.deadline {
+            Some(d) => d.days_until(),
+            None => "".to_string(),
+        };
+
+        let difficulty = match self.difficulty {
+            Some(d) => d.colour(),
             None => "".to_string(),
         };
 
         vec![
             Cow::Borrowed(&self.title),
             Cow::Owned(self.desc.as_deref().unwrap_or("").to_string()),
-            Cow::Owned(difficulty_colored(&self.difficulty)),
+            Cow::Owned(difficulty),
             Cow::Owned(deadline),
             Cow::Owned(
                 self.tags
