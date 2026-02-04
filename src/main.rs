@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use dialoguer::{theme::ColorfulTheme, Confirm};
+use std::path::PathBuf;
 use todo::{db::Database, display, task::Task};
 
 /// A Todo list CLI
@@ -137,7 +137,14 @@ fn main() -> Result<()> {
             println!("Removed {n} tasks")
         }
         Commands::Clear => {
-            db.clear()?;
+            let theme = ColorfulTheme::default();
+            let confirm = Confirm::new()
+                .with_prompt("Are you that you want to clear all tasks?")
+                .interact()?;
+
+            if confirm {
+                db.clear()?;
+            }
         }
     };
 
