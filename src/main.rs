@@ -1,10 +1,9 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
-use dialoguer::{theme::ColorfulTheme, Confirm};
+use dialoguer::Confirm;
 use std::path::PathBuf;
 use todo::{db::Database, display, task::Task};
 
-/// A Todo list CLI
 #[derive(Debug, Parser)]
 #[command(name = "todo")]
 #[command(about = "A task management and productivity CLI tool", long_about = None)]
@@ -17,24 +16,7 @@ struct Cli {
     path: Option<PathBuf>,
 }
 
-#[derive(Debug, Subcommand)]
-enum Commands {
-    #[command(about = "Add a task")]
-    Add {
-        /// The name of the task
-        #[arg(value_name = "TASK")]
-        title: Option<String>,
-
-        /// A description of the task
-        #[arg(short, long = "desc")]
-        description: Option<String>,
-
-        /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
-        #[arg(short = 'D', long = "diff")]
-        difficulty: Option<u8>,
-
-        #[arg(short = 'l', long)]
-        #[arg(long_help = r#"Deadline for the task
+const DEADLINE_HELP: &str = r#"Deadline for the task
 
 Supported formats:
   Keywords:
@@ -61,14 +43,35 @@ Supported formats:
     --deadline today
     --deadline friday
     --deadline +5d
-    --deadline 2026-12-31"#)]
+    --deadline 2026-12-31"#;
+
+const TAGS_HELP: &str = r#"Tags associated with a task
+  Examples:
+    --tags work
+    --tags work,project"#;
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    #[command(about = "Add a task")]
+    Add {
+        /// The name of the task
+        #[arg(value_name = "TASK")]
+        title: Option<String>,
+
+        /// A description of the task
+        #[arg(short, long = "desc")]
+        description: Option<String>,
+
+        /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
+        #[arg(short = 'D', long = "diff")]
+        difficulty: Option<u8>,
+
+        #[arg(short = 'l', long)]
+        #[arg(long_help = DEADLINE_HELP )]
         deadline: Option<String>,
 
         #[arg(short, long, value_delimiter = ',')]
-        #[arg(long_help = r#"Tags associated with a task
-  Examples:
-    --tags work
-    --tags work,project"#)]
+        #[arg(long_help = TAGS_HELP)]
         tags: Option<Vec<String>>,
 
         /// The parent task id if this is a subtask
@@ -77,6 +80,34 @@ Supported formats:
     },
     #[command(about = "Mark a task as complete")]
     Complete { id: String },
+    #[command(about = "Update a task")]
+    Update {
+        id: String,
+
+        /// The name of the task
+        #[arg(long = "task", value_name = "TASK")]
+        title: Option<String>,
+
+        /// A description of the task
+        #[arg(short, long = "desc")]
+        description: Option<String>,
+
+        /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
+        #[arg(short = 'D', long = "diff")]
+        difficulty: Option<u8>,
+
+        #[arg(short = 'l', long)]
+        #[arg(long_help = DEADLINE_HELP )]
+        deadline: Option<String>,
+
+        #[arg(short, long, value_delimiter = ',')]
+        #[arg(long_help = TAGS_HELP)]
+        tags: Option<Vec<String>>,
+
+        /// The parent task id if this is a subtask
+        #[arg(short, long, value_name = "PARENT_ID")]
+        pid: Option<String>,
+    },
     #[command(about = "Show the next task to undertake based on task difficulty and deadline")]
     Next,
     #[command(about = "Show information about a task")]
@@ -88,13 +119,19 @@ Supported formats:
         #[arg(short, long, value_delimiter = ',', conflicts_with = "view")]
         columns: Option<Vec<display::Column>>,
     },
-    #[command(about = "Remove a task")]
+    #[command(about = "Remove tasks")]
     Remove {
-        #[arg(value_name = "ID")]
-        id: String,
+        #[arg(value_name = "IDs", conflicts_with = "tags", num_args = 1..)]
+        ids: Option<Vec<String>>,
+        #[arg(short, long, value_delimiter = ',', conflicts_with = "ids")]
+        #[arg(long_help = TAGS_HELP)]
+        tags: Option<Vec<String>>,
     },
     #[command(about = "Clear all tasks")]
-    Clear,
+    Clear {
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -123,6 +160,26 @@ fn main() -> Result<()> {
             let id = db.completed(id)?;
             println!("Task with ID {id} marked as complete");
         }
+        Commands::Update {
+            id,
+            title,
+            description,
+            difficulty,
+            deadline,
+            tags,
+            pid,
+        } => {
+            let mut task_title = "".to_string();
+
+            if let Some(t) = title {
+                task_title = t
+            }
+
+            let task = Task::new(task_title, description, difficulty, deadline, tags, pid)?;
+
+            let id = db.update(id, task)?;
+            println!("Updated task with ID {id}");
+        }
         Commands::Next => {
             let task = db.next()?;
             println!("{}", task)
@@ -132,15 +189,25 @@ fn main() -> Result<()> {
             println!("{}", task)
         }
         Commands::List { view, columns } => display::list_tasks(db, view, columns)?,
-        Commands::Remove { id } => {
-            let n = db.remove(id)?;
-            println!("Removed {n} tasks")
+        Commands::Remove { ids, tags } => {
+            if let Some(tags) = tags {
+                let n = db.remove_tags(tags)?;
+                println!("Removed {} tasks", n)
+            } else if let Some(ids) = ids {
+                let n = db.remove_ids(ids)?;
+                println!("Removed {} tasks", n)
+            } else {
+                bail!("Must provide either task IDs or --tags.");
+            }
         }
-        Commands::Clear => {
-            let theme = ColorfulTheme::default();
-            let confirm = Confirm::new()
-                .with_prompt("Are you that you want to clear all tasks?")
-                .interact()?;
+        Commands::Clear { force } => {
+            let mut confirm = true;
+
+            if !force {
+                confirm = Confirm::new()
+                    .with_prompt("Are you that you want to clear all tasks?")
+                    .interact()?;
+            }
 
             if confirm {
                 db.clear()?;

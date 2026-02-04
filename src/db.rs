@@ -69,6 +69,8 @@ impl Database {
             ",
         )?;
 
+        self.conn.execute("PRAGMA foreign_keys = ON", [])?;
+
         Ok(())
     }
 
@@ -137,8 +139,74 @@ impl Database {
         Ok(id)
     }
 
+    pub fn update(&mut self, id: String, mut updates: Task) -> Result<String> {
+        let existing = self.get_task(id.clone())?;
+
+        if updates.title.is_empty() {
+            updates.title = existing.title;
+        }
+        if updates.desc.is_none() {
+            updates.desc = existing.desc;
+        }
+        if updates.difficulty.is_none() {
+            updates.difficulty = existing.difficulty;
+        }
+        if updates.deadline.is_none() {
+            updates.deadline = existing.deadline;
+        }
+        if updates.pid.is_none() {
+            updates.pid = existing.pid;
+        }
+        updates.id = existing.id.clone();
+        updates.created = existing.created;
+
+        let db_task = updates.translate_to_db();
+
+        self.conn.execute(
+            "UPDATE tasks SET 
+            title = ?2,
+            description = ?3,
+            difficulty = ?4,
+            deadline = ?5,
+            parent_id = ?6,
+            completed = ?7
+         WHERE id = ?1",
+            (
+                &db_task.0, &db_task.1, &db_task.2, &db_task.3, &db_task.4, &db_task.6, db_task.8,
+            ),
+        )?;
+
+        if let Some(new_tags) = db_task.5 {
+            self.update_task_tags(&db_task.0, &new_tags)?;
+        }
+
+        Ok(id)
+    }
+
+    fn update_task_tags(&mut self, task_id: &str, tags: &[String]) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM task_tags WHERE task_id = ?1", [task_id])?;
+
+        for tag_name in tags {
+            self.conn
+                .execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", [tag_name])?;
+
+            let tag_id: i64 =
+                self.conn
+                    .query_row("SELECT id FROM tags WHERE name = ?1", [tag_name], |row| {
+                        row.get(0)
+                    })?;
+
+            self.conn.execute(
+                "INSERT INTO task_tags (task_id, tag_id) VALUES (?1, ?2)",
+                (task_id, tag_id),
+            )?;
+        }
+
+        Ok(())
+    }
+
     pub fn next(&self) -> Result<Task> {
-        // WHERE completed = 0 AND deadline IS NOT NULL
         let mut stmt = self.conn.prepare(
             "SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed
          FROM tasks
@@ -173,11 +241,52 @@ impl Database {
         Ok(task)
     }
 
-    pub fn remove(&mut self, id: String) -> Result<usize> {
-        let pattern = format!("{id}%");
-        let n = self
-            .conn
-            .execute("DELETE FROM tasks WHERE id LIKE ?1", [&pattern])?;
+    pub fn remove_ids(&mut self, ids: Vec<String>) -> Result<usize> {
+        let mut valid_ids = Vec::new();
+
+        for id in ids {
+            match self.get_task(id.clone()) {
+                Ok(_) => valid_ids.push(id),
+                Err(e) => {
+                    eprintln!("Warning: {}", e)
+                }
+            };
+        }
+
+        let mut n = 0;
+        for id in valid_ids {
+            let pattern = format!("{id}%");
+            n += self
+                .conn
+                .execute("DELETE FROM tasks WHERE id LIKE ?1", [&pattern])?;
+        }
+
+        Ok(n)
+    }
+
+    pub fn remove_tags(&self, tags: Vec<String>) -> Result<usize> {
+        let mut n = 0;
+
+        for tag in tags {
+            let mut stmt = self.conn.prepare(
+                "SELECT t.id
+                 FROM tasks t
+                 JOIN task_tags tt ON t.id = tt.task_id
+                 JOIN tags tg ON tt.tag_id = tg.id
+                 WHERE tg.name = ?1",
+            )?;
+
+            let ids = stmt
+                .query_map([tag], |row| row.get(0))?
+                .collect::<rusqlite::Result<Vec<String>>>()?;
+
+            for id in ids {
+                let pattern = format!("{id}%");
+                n += self
+                    .conn
+                    .execute("DELETE FROM tasks WHERE id LIKE ?1", [&pattern])?;
+            }
+        }
 
         Ok(n)
     }

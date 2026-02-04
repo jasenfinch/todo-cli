@@ -195,7 +195,7 @@ impl Task {
             .and_then(|s| s.parse().ok());
 
         let deadline: Option<String> = Input::with_theme(&theme)
-            .with_prompt("Deadline (DD-MM-YYYY, optional)")
+            .with_prompt("Deadline (today, tomorrow, +5d, YYYY-MM-DD, or empty)")
             .allow_empty(true)
             .validate_with(|input: &String| -> Result<(), &str> {
                 if input.is_empty() {
