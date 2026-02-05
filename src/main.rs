@@ -6,7 +6,13 @@ use todo::{db::Database, display, task::Task};
 
 #[derive(Debug, Parser)]
 #[command(name = "todo")]
-#[command(about = "A task management and productivity CLI tool", long_about = None)]
+#[command(author,version,about = "A task management and productivity CLI tool", long_about = None)]
+#[command(after_help = r#"EXAMPLES:
+    todo add "Fix bug" --diff 5 --deadline friday --tags work,urgent
+    todo list --view minimal
+    todo complete abc123
+    todo remove def456 ghi789
+    todo remove --tags work"#)]
 #[command(arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
@@ -62,8 +68,8 @@ enum Commands {
         #[arg(short, long = "desc")]
         description: Option<String>,
 
-        /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
-        #[arg(short = 'D', long = "diff")]
+        /// A value between 0 and 10 (0=trivial, 10=near-impossible)
+        #[arg(long = "diff", value_parser = clap::value_parser!(u8).range(0..=10))]
         difficulty: Option<u8>,
 
         #[arg(short = 'l', long)]
@@ -78,9 +84,9 @@ enum Commands {
         #[arg(short, long, value_name = "PARENT_ID")]
         pid: Option<String>,
     },
-    #[command(about = "Mark a task as complete")]
+    #[command(alias = "done", about = "Mark a task as complete")]
     Complete { id: String },
-    #[command(about = "Update a task")]
+    #[command(about = "Update a task (only specified fields are changed)")]
     Update {
         id: String,
 
@@ -92,8 +98,8 @@ enum Commands {
         #[arg(short, long = "desc")]
         description: Option<String>,
 
-        /// A value between 0 and 10. 0 is trivial and 10 is near-impossible
-        #[arg(short = 'D', long = "diff")]
+        /// A value between 0 and 10 (0=trivial, 10=near-impossible)
+        #[arg(long = "diff", value_parser = clap::value_parser!(u8).range(0..=10))]
         difficulty: Option<u8>,
 
         #[arg(short = 'l', long)]
@@ -112,7 +118,7 @@ enum Commands {
     Next,
     #[command(about = "Show information about a task")]
     Show { id: String },
-    #[command(about = "List tasks")]
+    #[command(alias = "ls", about = "List tasks")]
     List {
         #[arg(short, long, default_value = "compact")]
         view: display::ViewMode,
@@ -136,11 +142,16 @@ enum Commands {
         #[arg(long, conflicts_with = "include_completed")]
         completed: bool,
     },
-    #[command(about = "Remove tasks")]
+    #[command(alias = "rm", about = "Remove tasks")]
     Remove {
-        #[arg(value_name = "IDs", conflicts_with = "tags", num_args = 1..)]
+        #[arg(
+            value_name = "IDs",
+            required_unless_present = "tags",
+            conflicts_with = "tags",
+            num_args = 1..
+            )]
         ids: Option<Vec<String>>,
-        #[arg(short, long, value_delimiter = ',', conflicts_with = "ids")]
+        #[arg(short, long, value_delimiter = ',', required_unless_present = "ids")]
         #[arg(long_help = TAGS_HELP)]
         tags: Option<Vec<String>>,
     },
@@ -229,7 +240,8 @@ fn main() -> Result<()> {
 
             if !force {
                 confirm = Confirm::new()
-                    .with_prompt("Are you that you want to clear all tasks?")
+                    .with_prompt("Are you sure you want to clear ALL tasks? This cannot be undone.")
+                    .default(false)
                     .interact()?;
             }
 
