@@ -335,21 +335,73 @@ impl Database {
         Task::translate_from_db(row)
     }
 
-    pub fn get_tasks(&self) -> Result<Vec<Task>> {
-        let mut stmt = self
-            .conn
-            .prepare("
-                SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed
-                FROM tasks
-                WHERE completed = 0
-                ORDER BY 
-                    CASE WHEN deadline IS NULL THEN 1 ELSE 0 END,  
-                    deadline ASC,
-                    difficulty DESC
-                ")?;
+    pub fn get_tasks(
+        &self,
+        tags: Option<Vec<String>>,
+        pid: Option<String>,
+        include_completed: bool,
+        only_completed: bool,
+    ) -> Result<Vec<Task>> {
+        // Build dynamic query based on filters
+        let mut query = String::from(
+            "SELECT DISTINCT t.id, t.title, t.description, t.difficulty, t.deadline, 
+                t.parent_id, t.created_at, t.completed
+         FROM tasks t",
+        );
 
+        let mut joins = Vec::new();
+        let mut conditions = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // Filter by tags (requires join)
+        if let Some(tag_list) = &tags {
+            joins.push("JOIN task_tags tt ON t.id = tt.task_id");
+            joins.push("JOIN tags tg ON tt.tag_id = tg.id");
+
+            let placeholders = tag_list.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+            conditions.push(format!("tg.name IN ({})", placeholders));
+
+            for tag in tag_list {
+                params.push(Box::new(tag.clone()));
+            }
+        }
+
+        // Filter by parent ID
+        if let Some(parent_id) = &pid {
+            let pattern = format!("{}%", parent_id);
+            conditions.push("t.parent_id LIKE ?".to_string());
+            params.push(Box::new(pattern));
+        }
+
+        // Filter by completion status
+        if only_completed {
+            conditions.push("t.completed = 1".to_string());
+        } else if !include_completed {
+            conditions.push("t.completed = 0".to_string());
+        }
+
+        // Build final query
+        if !joins.is_empty() {
+            query.push(' ');
+            query.push_str(&joins.join(" "));
+        }
+
+        if !conditions.is_empty() {
+            query.push_str(" WHERE ");
+            query.push_str(&conditions.join(" AND "));
+        }
+
+        query.push_str(
+            " ORDER BY 
+            CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
+            t.deadline ASC,
+            t.difficulty DESC",
+        );
+
+        // Execute query
+        let mut stmt = self.conn.prepare(&query)?;
         let rows = stmt
-            .query_map([], |row| {
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get(1)?,
@@ -364,13 +416,13 @@ impl Database {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Load tasks with their tags
         let mut tasks = Vec::new();
         for mut row in rows {
             let tags = self.get_tags(&row.0)?;
             if !tags.is_empty() {
                 row.8 = Some(tags);
             }
-
             tasks.push(Task::translate_from_db(row)?);
         }
 

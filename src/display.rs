@@ -80,8 +80,16 @@ impl Column {
     }
 }
 
-pub fn list_tasks(db: Database, view: ViewMode, columns: Option<Vec<Column>>) -> Result<()> {
-    let tasks = db.get_tasks()?;
+pub fn list_tasks(
+    db: Database,
+    view: ViewMode,
+    columns: Option<Vec<Column>>,
+    tags: Option<Vec<String>>,
+    pid: Option<String>,
+    include_completed: bool,
+    completed: bool,
+) -> Result<()> {
+    let tasks = db.get_tasks(tags, pid, include_completed, completed)?;
 
     if tasks.is_empty() {
         println!("No tasks found.");

@@ -116,8 +116,25 @@ enum Commands {
     List {
         #[arg(short, long, default_value = "compact")]
         view: display::ViewMode,
+
         #[arg(short, long, value_delimiter = ',', conflicts_with = "view")]
         columns: Option<Vec<display::Column>>,
+
+        /// Show only tasks with specific tags
+        #[arg(short, long, value_delimiter = ',', conflicts_with = "pid")]
+        tags: Option<Vec<String>>,
+
+        /// Show only the task with parent ID along with its child tasks
+        #[arg(short, long, conflicts_with = "tags")]
+        pid: Option<String>,
+
+        /// Include completed tasks
+        #[arg(long, conflicts_with = "completed")]
+        include_completed: bool,
+
+        /// Show only completed tasks
+        #[arg(long, conflicts_with = "include_completed")]
+        completed: bool,
     },
     #[command(about = "Remove tasks")]
     Remove {
@@ -188,7 +205,14 @@ fn main() -> Result<()> {
             let task = db.get_task(id)?;
             println!("{}", task)
         }
-        Commands::List { view, columns } => display::list_tasks(db, view, columns)?,
+        Commands::List {
+            view,
+            columns,
+            tags,
+            pid,
+            include_completed,
+            completed,
+        } => display::list_tasks(db, view, columns, tags, pid, include_completed, completed)?,
         Commands::Remove { ids, tags } => {
             if let Some(tags) = tags {
                 let n = db.remove_tags(tags)?;
