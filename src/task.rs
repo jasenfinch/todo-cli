@@ -8,23 +8,48 @@ use std::borrow::Cow;
 use std::{fmt::Display, time::SystemTime};
 use tabled::Tabled;
 
+#[derive(Debug, Clone)]
+pub struct ID {
+    value: String,
+}
+
+impl Display for ID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl From<String> for ID {
+    fn from(value: String) -> Self {
+        Self { value }
+    }
+}
+
+impl ID {
+    fn new(task_title: &str) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        let content = format!("blob {}\0{}{}", task_title.len(), task_title, timestamp);
+
+        Self {
+            value: generate_hash(&content),
+        }
+    }
+
+    fn short(&self) -> String {
+        self.value[0..7].to_string()
+    }
+}
+
 fn generate_hash(content: &str) -> String {
     let mut hasher = Sha1::new();
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
 
     format!("{:x}", result)
-}
-
-fn generate_content_hash(title: &str) -> String {
-    let timestamp = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
-    let content = format!("blob {}\0{}{}", title.len(), title, timestamp);
-
-    generate_hash(&content)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,13 +101,13 @@ impl Into<u8> for Difficulty {
 
 #[derive(Debug)]
 pub struct Task {
-    pub id: String,
+    pub id: ID,
     pub title: String,
     pub desc: Option<String>,
     pub difficulty: Option<Difficulty>,
     pub deadline: Option<Deadline>,
     pub tags: Option<Vec<String>>,
-    pub pid: Option<String>,
+    pub pid: Option<ID>,
     pub created: SystemTime,
     pub completed: bool,
 }
@@ -146,8 +171,13 @@ impl Task {
             None => None,
         };
 
+        let pid = match pid {
+            Some(p) => Some(ID::new(&p)),
+            None => None,
+        };
+
         let task = Task {
-            id: generate_content_hash(&title),
+            id: ID::new(&title),
             title,
             desc,
             difficulty,
@@ -251,13 +281,13 @@ impl Task {
             .as_secs() as i64;
 
         (
-            self.id,
+            self.id.value,
             self.title,
             self.desc,
             self.difficulty.map(|d| d.into()),
             self.deadline.map(|d| d.to_string()),
             self.tags,
-            self.pid,
+            self.pid.map(|p| p.to_string()),
             timestamp,
             self.completed,
         )
@@ -290,13 +320,13 @@ impl Task {
             .expect("Unable to parse created time stamp from the task db");
 
         Ok(Self {
-            id: row.0,
+            id: row.0.into(),
             title: row.1,
             desc: row.2,
             difficulty: diff,
             deadline,
             tags: row.8,
-            pid: row.5,
+            pid: row.5.map(|p| p.into()),
             created: created.into(),
             completed: row.7,
         })
@@ -309,11 +339,11 @@ impl Tabled for Task {
     fn fields(&self) -> Vec<std::borrow::Cow<'_, str>> {
         let created: DateTime<Local> = self.created.into();
         let created_str = created.format("%d-%m-%Y").to_string();
-        let mut pid = self.pid.as_deref().unwrap_or("").to_string();
 
-        if pid.chars().count() > 0 {
-            pid = pid[0..7].to_string()
-        }
+        let pid = match &self.pid {
+            Some(p) => p.short(),
+            None => "".to_string(),
+        };
 
         let deadline = match &self.deadline {
             Some(d) => d.days_until(),
@@ -336,7 +366,7 @@ impl Tabled for Task {
                     .map(|t| t.join(", "))
                     .unwrap_or("".to_string()),
             ),
-            Cow::Borrowed(&self.id[0..7]),
+            Cow::Borrowed(&self.id.value[0..7]),
             Cow::Owned(pid),
             Cow::Owned(created_str),
             Cow::Owned(if self.completed { "✓" } else { "" }.to_string()),
