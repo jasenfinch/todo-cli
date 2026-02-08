@@ -172,7 +172,7 @@ impl Task {
         };
 
         let pid = match pid {
-            Some(p) => Some(ID::new(&p)),
+            Some(p) => Some(ID::from(p)),
             None => None,
         };
 

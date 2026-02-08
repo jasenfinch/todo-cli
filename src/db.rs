@@ -77,7 +77,6 @@ impl Database {
     pub fn clear(&self) -> Result<()> {
         self.conn.execute("DELETE FROM tasks", [])?;
 
-        // Vacuum to reclaim space
         self.conn.execute("VACUUM", [])?;
 
         Ok(())
@@ -90,11 +89,12 @@ impl Database {
         if pid.is_some() {
             let parent_id = pid.unwrap();
             let pattern = format!("{parent_id}%");
-            pid = self.conn.query_row(
-                "SELECT id FROM tasks WHERE id LIKE ?1",
-                [&pattern],
-                |row| row.get(0),
-            )?;
+            pid = self
+                .conn
+                .query_row("SELECT id FROM tasks WHERE id LIKE ?1", [&pattern], |row| {
+                    row.get(0)
+                })
+                .context("Unable to find parent ID")?;
         }
 
         self.conn.execute(
