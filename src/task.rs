@@ -399,31 +399,42 @@ mod test {
     }
 
     #[test]
-    fn test_task() {
-        assert!(Task::new(
+    fn test_task_creation_with_valid_date() {
+        let result = Task::new(
+            "test".to_string(),
+            Some("test".to_string()),
+            Some(4),
+            Some("23/01/2026".to_string()),
+            None,
+            None,
+        );
+        assert!(result.is_ok(), "Task creation failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_task_creation_with_invalid_date() {
+        let result = Task::new(
             "test".to_string(),
             Some("test".to_string()),
             Some(4),
             Some("23-01-2026".to_string()),
             None,
             None,
-        )
-        .is_ok());
+        );
+        assert!(
+            result.is_err(),
+            "Task creation should fail with an invalid date"
+        );
+    }
+
+    #[test]
+    fn test_task_creation_with_invalid_difficulty() {
         assert!(Task::new(
             "test".to_string(),
             Some("test".to_string()),
             Some(11),
-            Some("23-01-2026".to_string()),
+            Some("23/01/2026".to_string()),
             Some(vec!["Work".to_string()]),
-            None
-        )
-        .is_err());
-        assert!(Task::new(
-            "test".to_string(),
-            Some("test".to_string()),
-            Some(11),
-            Some("incorrect".to_string()),
-            None,
             None
         )
         .is_err());
