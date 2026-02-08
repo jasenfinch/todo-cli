@@ -1,8 +1,9 @@
 [package]
-name = "todo"
+name = "todo-cli"
 version = "0.1.0"
 edition = "2024"
 authors = ["Jasen Finch <jsnfnch4@gmail.com>"]
+licence = "MIT"
 
 [dependencies]
 anyhow = "1.0.100"

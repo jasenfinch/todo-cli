@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use dialoguer::Confirm;
-use todo::{
+use todo_cli::{
     cli::{Cli, Commands},
     db::Database,
     display,
