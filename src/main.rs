@@ -56,6 +56,14 @@ const TAGS_HELP: &str = r#"Tags associated with a task
     --tags work
     --tags work,project"#;
 
+fn pid_validator(s: &str) -> Result<String, String> {
+    if s.len() == 7 {
+        Ok(s.to_owned())
+    } else {
+        Err("Parent ID must be 7 characters long".to_string())
+    }
+}
+
 #[derive(Debug, Subcommand)]
 enum Commands {
     #[command(about = "Add a task")]
@@ -82,6 +90,7 @@ enum Commands {
 
         /// The parent task id if this is a subtask
         #[arg(short, long, value_name = "PARENT_ID")]
+        #[arg(value_parser = pid_validator)]
         pid: Option<String>,
     },
     #[command(alias = "done", about = "Mark a task as complete")]
