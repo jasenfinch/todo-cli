@@ -76,6 +76,8 @@ impl Database {
 
     pub fn clear(&self) -> Result<()> {
         self.conn.execute("DELETE FROM tasks", [])?;
+        self.conn.execute("DELETE FROM tags", [])?;
+        self.conn.execute("DELETE FROM task_tags", [])?;
 
         self.conn.execute("VACUUM", [])?;
 
@@ -356,7 +358,6 @@ impl Database {
         all: bool,
         only_completed: bool,
     ) -> Result<Vec<Task>> {
-        // Build dynamic query based on filters
         let mut query = String::from(
             "SELECT DISTINCT t.id, t.title, t.description, t.difficulty, t.deadline, 
                 t.parent_id, t.created_at, t.completed
@@ -367,7 +368,6 @@ impl Database {
         let mut conditions = Vec::new();
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
-        // Filter by tags (requires join)
         if let Some(tag_list) = &tags {
             joins.push("JOIN task_tags tt ON t.id = tt.task_id");
             joins.push("JOIN tags tg ON tt.tag_id = tg.id");
@@ -380,21 +380,18 @@ impl Database {
             }
         }
 
-        // Filter by parent ID
         if let Some(parent_id) = &pid {
             let pattern = format!("{}%", parent_id);
             conditions.push("t.parent_id LIKE ?".to_string());
             params.push(Box::new(pattern));
         }
 
-        // Filter by completion status
         if only_completed {
             conditions.push("t.completed = 1".to_string());
         } else if !all {
             conditions.push("t.completed = 0".to_string());
         }
 
-        // Build final query
         if !joins.is_empty() {
             query.push(' ');
             query.push_str(&joins.join(" "));
@@ -412,7 +409,6 @@ impl Database {
             t.difficulty DESC",
         );
 
-        // Execute query
         let mut stmt = self.conn.prepare(&query)?;
         let rows = stmt
             .query_map(rusqlite::params_from_iter(params.iter()), |row| {
@@ -430,7 +426,6 @@ impl Database {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Load tasks with their tags
         let mut tasks = Vec::new();
         for mut row in rows {
             let tags = self.get_tags(&row.0)?;

@@ -92,7 +92,7 @@ pub fn list_tasks(
     let tasks = db.get_tasks(tags, pid, include_completed, completed)?;
 
     if tasks.is_empty() {
-        println!("No tasks found.");
+        println!("No tasks found");
         return Ok(());
     }
 
