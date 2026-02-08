@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use dialoguer::Confirm;
 use std::path::PathBuf;
@@ -134,12 +134,12 @@ enum Commands {
         #[arg(short, long, conflicts_with = "tags")]
         pid: Option<String>,
 
-        /// Include completed tasks
+        /// Show all tasks including completed
         #[arg(long, conflicts_with = "completed")]
-        include_completed: bool,
+        all: bool,
 
         /// Show only completed tasks
-        #[arg(long, conflicts_with = "include_completed")]
+        #[arg(long, conflicts_with = "all")]
         completed: bool,
     },
     #[command(alias = "rm", about = "Remove tasks")]
@@ -221,19 +221,16 @@ fn main() -> Result<()> {
             columns,
             tags,
             pid,
-            include_completed,
+            all,
             completed,
-        } => display::list_tasks(db, view, columns, tags, pid, include_completed, completed)?,
+        } => display::list_tasks(db, view, columns, tags, pid, all, completed)?,
         Commands::Remove { ids, tags } => {
-            if let Some(tags) = tags {
-                let n = db.remove_tags(tags)?;
-                println!("Removed {} tasks", n)
-            } else if let Some(ids) = ids {
-                let n = db.remove_ids(ids)?;
-                println!("Removed {} tasks", n)
-            } else {
-                bail!("Must provide either task IDs or --tags.");
-            }
+            let n = match (ids, tags) {
+                (Some(ids), None) => db.remove_ids(ids)?,
+                (None, Some(tags)) => db.remove_tags(tags)?,
+                _ => unreachable!("clap enforces exactly one is present"),
+            };
+            println!("Removed {} task(s)", n);
         }
         Commands::Clear { force } => {
             let mut confirm = true;

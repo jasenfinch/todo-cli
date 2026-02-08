@@ -339,7 +339,7 @@ impl Database {
         &self,
         tags: Option<Vec<String>>,
         pid: Option<String>,
-        include_completed: bool,
+        all: bool,
         only_completed: bool,
     ) -> Result<Vec<Task>> {
         // Build dynamic query based on filters
@@ -376,7 +376,7 @@ impl Database {
         // Filter by completion status
         if only_completed {
             conditions.push("t.completed = 1".to_string());
-        } else if !include_completed {
+        } else if !all {
             conditions.push("t.completed = 0".to_string());
         }
 
