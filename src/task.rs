@@ -333,6 +333,14 @@ impl Task {
     }
 }
 
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
 impl Tabled for Task {
     const LENGTH: usize = 9;
 
@@ -356,16 +364,23 @@ impl Tabled for Task {
         };
 
         vec![
-            Cow::Borrowed(&self.title),
-            Cow::Owned(self.desc.as_deref().unwrap_or("").to_string()),
+            Cow::Owned(truncate_string(&self.title, 30)),
+            Cow::Owned(
+                self.desc
+                    .as_deref()
+                    .map(|d| truncate_string(d, 40))
+                    .unwrap_or("".to_string()),
+            ),
             Cow::Owned(difficulty),
             Cow::Owned(deadline),
-            Cow::Owned(
-                self.tags
+            Cow::Owned(truncate_string(
+                &self
+                    .tags
                     .as_ref()
                     .map(|t| t.join(", "))
                     .unwrap_or("".to_string()),
-            ),
+                30,
+            )),
             Cow::Borrowed(&self.id.value[0..7]),
             Cow::Owned(pid),
             Cow::Owned(created_str),
