@@ -25,12 +25,6 @@ cd todo
 cargo install --path .
 ```
 
-### Using Cargo
-
-```bash
-cargo install todo-cli
-```
-
 ## Quick Start
 
 ```bash
