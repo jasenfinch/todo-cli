@@ -3,8 +3,11 @@ name = "todo-cli"
 version = "0.1.0"
 edition = "2024"
 authors = ["Jasen Finch <jsnfnch4@gmail.com>"]
-licence = "MIT"
 description = "A task management and productivity CLI tool"
+
+[[bin]]
+name = "todo"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.100"

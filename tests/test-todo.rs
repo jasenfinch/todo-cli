@@ -4,7 +4,7 @@ use tempfile::TempDir;
 
 /// Helper to create a new command with a temporary database
 fn todo_cmd(temp_dir: &TempDir) -> Command {
-    let mut cmd = Command::new(cargo::cargo_bin!());
+    let mut cmd = Command::new(cargo::cargo_bin!("todo"));
     cmd.arg("-p").arg(temp_dir.path());
     cmd
 }
@@ -25,7 +25,7 @@ fn add_task(temp_dir: &TempDir, args: &[&str]) -> String {
 
 #[test]
 fn test_help() {
-    Command::new(cargo::cargo_bin!())
+    Command::new(cargo::cargo_bin!("todo"))
         .arg("--help")
         .assert()
         .success()
@@ -34,7 +34,7 @@ fn test_help() {
 
 #[test]
 fn test_version() {
-    Command::new(cargo::cargo_bin!())
+    Command::new(cargo::cargo_bin!("todo"))
         .arg("--version")
         .assert()
         .success();
@@ -42,7 +42,7 @@ fn test_version() {
 
 #[test]
 fn test_no_args_shows_help() {
-    Command::new(cargo::cargo_bin!())
+    Command::new(cargo::cargo_bin!("todo"))
         .assert()
         .failure()
         .stderr(predicate::str::contains("Usage"));
