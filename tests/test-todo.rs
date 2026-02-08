@@ -18,6 +18,7 @@ fn add_task(temp_dir: &TempDir, args: &[&str]) -> String {
         .unwrap();
 
     let stdout = String::from_utf8(output.stdout).unwrap();
+
     // Extract ID from "Added task with ID abc123"
     stdout.split_whitespace().last().unwrap().trim().to_string()
 }
@@ -176,7 +177,7 @@ fn test_list_custom_columns() {
     add_task(&temp_dir, &["Task"]);
 
     todo_cmd(&temp_dir)
-        .args(["list", "--columns", "id,title,difficulty"])
+        .args(["list", "--columns", "id,task,difficulty"])
         .assert()
         .success();
 }
@@ -217,7 +218,7 @@ fn test_list_filter_by_parent() {
 }
 
 #[test]
-fn test_list_include_completed() {
+fn test_list_all() {
     let temp_dir = TempDir::new().unwrap();
 
     let id = add_task(&temp_dir, &["Task"]);
@@ -233,7 +234,7 @@ fn test_list_include_completed() {
 
     // With flag, should show completed
     todo_cmd(&temp_dir)
-        .args(["list", "--include-completed"])
+        .args(["list", "--all"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Task"));
