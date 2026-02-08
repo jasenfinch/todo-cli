@@ -78,6 +78,10 @@ fn main() -> Result<()> {
             };
             println!("Removed {} task(s)", n);
         }
+        Commands::Tags => {
+            let tags = db.tags()?;
+            println!("{}", tags.join("  "))
+        }
         Commands::Clear { force } => {
             let mut confirm = true;
 

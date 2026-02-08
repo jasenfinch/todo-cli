@@ -139,6 +139,20 @@ impl Database {
         Ok(id)
     }
 
+    pub fn tags(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tags.name 
+                FROM tags",
+        )?;
+
+        let tags = stmt
+            .query_map([], |r| r.get(0))?
+            .map(|r| r.map_err(anyhow::Error::from))
+            .collect::<Result<Vec<String>, anyhow::Error>>()?;
+
+        Ok(tags)
+    }
+
     pub fn update(&mut self, id: String, mut updates: Task) -> Result<String> {
         let existing = self.get_task(id.clone())?;
 

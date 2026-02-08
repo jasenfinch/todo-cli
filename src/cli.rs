@@ -150,6 +150,8 @@ pub enum Commands {
         #[arg(long, conflicts_with = "all")]
         completed: bool,
     },
+    #[command(about = "List all tags")]
+    Tags,
     #[command(alias = "rm", about = "Remove tasks")]
     Remove {
         #[arg(
