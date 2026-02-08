@@ -1,5 +1,8 @@
 # todo
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://github.com/jasenfinch/todo-cli/actions/workflows/rust.yml/badge.svg)](https://github.com/jasenfinch/todo-cli/actions/workflows/rust.yml)
+
 A powerful, intuitive command-line task management tool built with Rust.
 
 ## Features
