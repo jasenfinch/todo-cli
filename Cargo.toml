@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Jasen Finch <jsnfnch4@gmail.com>"]
 description = "A task management and productivity CLI tool"
+license = "MIT"
+repository = "https://github.com/jasenfinch/todo-cli"
+homepage = "https://github.com/jasenfinch/todo-cli"
+keywords = ["cli", "todo", "task", "productivity", "management"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 [[bin]]
 name = "todo"
@@ -11,14 +17,22 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.100"
-assert_cmd = "2.1.2"
 chrono = "0.4.42"
 clap = { version = "4.5.54", features = ["cargo", "derive"] }
 colored = "3.1.1"
 dialoguer = "0.12.0"
 directories = "6.0.0"
-predicates = "3.1.3"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
 sha1 = "0.10.6"
 tabled = { version = "0.20.0", features = ["ansi"] }
+
+[dev-dependencies]
+assert_cmd = "2.1.2"
+predicates = "3.1.3"
 tempfile = "3.24.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
