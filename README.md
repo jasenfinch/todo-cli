@@ -31,18 +31,6 @@ cargo install --path .
 cargo install todo-cli
 ```
 
-### Using Nix (with flakes)
-
-```bash
-nix profile install github:jasenfinch/todo-cli
-```
-
-### Using Nix (without flakes)
-
-```bash
-nix-env -if https://github.com/jasenfinch/todo-cli/archive/main.tar.gz
-```
-
 ## Quick Start
 
 ```bash
