@@ -5,7 +5,7 @@ use crate::display;
 
 #[derive(Debug, Parser)]
 #[command(name = "todo")]
-#[command(author,version,about = "A task management and productivity CLI tool", long_about = None)]
+#[command(author,version, long_about = None)]
 #[command(after_help = r#"EXAMPLES:
     todo add "Fix bug" --diff 5 --deadline friday --tags work,urgent
     todo list --view minimal
