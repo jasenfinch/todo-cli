@@ -12,6 +12,7 @@ clap = { version = "4.5.54", features = ["derive"] }
 colored = "3.1.1"
 dialoguer = "0.12.0"
 directories = "6.0.0"
+predicates = "3.1.3"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
 sha1 = "0.10.6"
 tabled = { version = "0.20.0", features = ["ansi"] }
