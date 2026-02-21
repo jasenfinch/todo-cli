@@ -1,8 +1,8 @@
 use crate::deadline::Deadline;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Local};
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Input};
+use dialoguer::{Input, theme::ColorfulTheme};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::{fmt::Display, time::SystemTime};
@@ -93,9 +93,9 @@ impl From<u8> for Difficulty {
     }
 }
 
-impl Into<u8> for Difficulty {
-    fn into(self) -> u8 {
-        self.value
+impl From<Difficulty> for u8 {
+    fn from(value: Difficulty) -> Self {
+        value.value
     }
 }
 
@@ -133,10 +133,10 @@ impl Display for Task {
             writeln!(f, "  Deadline: {} ({})", deadline, deadline.days_until())?;
         }
 
-        if let Some(tags) = &self.tags {
-            if !tags.is_empty() {
-                writeln!(f, "  Tags: {}", tags.join(", "))?;
-            }
+        if let Some(tags) = &self.tags
+            && !tags.is_empty()
+        {
+            writeln!(f, "  Tags: {}", tags.join(", "))?;
         }
 
         writeln!(f, "  ID: {}", self.id)?;
@@ -171,10 +171,7 @@ impl Task {
             None => None,
         };
 
-        let pid = match pid {
-            Some(p) => Some(ID::from(p)),
-            None => None,
-        };
+        let pid = pid.map(ID::from);
 
         let task = Task {
             id: ID::new(&title),
@@ -444,14 +441,16 @@ mod test {
 
     #[test]
     fn test_task_creation_with_invalid_difficulty() {
-        assert!(Task::new(
-            "test".to_string(),
-            Some("test".to_string()),
-            Some(11),
-            Some("23/01/2026".to_string()),
-            Some(vec!["Work".to_string()]),
-            None
-        )
-        .is_err());
+        assert!(
+            Task::new(
+                "test".to_string(),
+                Some("test".to_string()),
+                Some(11),
+                Some("23/01/2026".to_string()),
+                Some(vec!["Work".to_string()]),
+                None
+            )
+            .is_err()
+        );
     }
 }

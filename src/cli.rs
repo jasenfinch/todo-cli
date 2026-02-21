@@ -20,7 +20,7 @@ pub struct Cli {
     pub path: Option<PathBuf>,
 }
 
-const DEADLINE_HELP: &str = r#"Deadline for the task
+const DEADLINE_HELP: &str = r"Deadline for the task
 
 Supported formats:
   Keywords:
@@ -47,12 +47,12 @@ Supported formats:
     --deadline today
     --deadline friday
     --deadline +5d
-    --deadline 2026-12-31"#;
+    --deadline 2026-12-31";
 
-const TAGS_HELP: &str = r#"Tags associated with a task
+const TAGS_HELP: &str = r"Tags associated with a task
   Examples:
     --tags work
-    --tags work,project"#;
+    --tags work,project";
 
 fn pid_validator(s: &str) -> Result<String, String> {
     if s.len() == 7 {

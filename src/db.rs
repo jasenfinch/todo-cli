@@ -11,13 +11,12 @@ pub struct Database {
 
 impl Database {
     fn get_path(path: Option<PathBuf>) -> Result<PathBuf> {
-        let db_dir = match path {
-            Some(dir) => dir,
-            None => {
-                let proj_dir = ProjectDirs::from("com", "Todo", "todo")
-                    .context("Could not determine the local store directory")?;
-                proj_dir.data_dir().to_path_buf()
-            }
+        let db_dir = if let Some(dir) = path {
+            dir
+        } else {
+            let proj_dir = ProjectDirs::from("com", "Todo", "todo")
+                .context("Could not determine the local store directory")?;
+            proj_dir.data_dir().to_path_buf()
         };
 
         fs::create_dir_all(&db_dir).context("Unable to create the local store directory")?;
@@ -128,14 +127,14 @@ impl Database {
     }
 
     pub fn completed(&mut self, id: String) -> Result<String> {
-        let pattern = format!("{}%", id);
+        let pattern = format!("{id}%");
         let n = self.conn.execute(
             "UPDATE tasks SET completed = 1 WHERE id LIKE ?1",
             [&pattern],
         )?;
 
         if n == 0 {
-            bail!("No task found matching '{}'", id);
+            bail!("No task found matching '{id}'");
         }
 
         Ok(id)
