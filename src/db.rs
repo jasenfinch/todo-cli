@@ -1,9 +1,9 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::{fs, path::PathBuf, time::SystemTime};
 
-use crate::task::{self, Task, ID};
+use crate::task::{self, ID, Task};
 
 pub struct Database {
     pub conn: Connection,
@@ -374,8 +374,11 @@ impl Database {
         let mut joins = Vec::new();
         let mut conditions = Vec::new();
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        let mut group_by_clause = String::new();
 
-        if let Some(tag_list) = &tags {
+        if let Some(tag_list) = &tags
+            && !tag_list.is_empty()
+        {
             joins.push("JOIN task_tags tt ON t.id = tt.task_id");
             joins.push("JOIN tags tg ON tt.tag_id = tg.id");
 
@@ -385,6 +388,13 @@ impl Database {
             for tag in tag_list {
                 params.push(Box::new(tag.clone()));
             }
+
+            group_by_clause = format!(
+                " GROUP BY t.id, t.title, t.description, t.difficulty, t.deadline, 
+                          t.parent_id, t.created, t.completed
+                 HAVING COUNT(DISTINCT tg.name) = {}",
+                tag_list.len()
+            );
         }
 
         if let Some(parent_id) = &pid {
@@ -407,6 +417,10 @@ impl Database {
         if !conditions.is_empty() {
             query.push_str(" WHERE ");
             query.push_str(&conditions.join(" AND "));
+        }
+
+        if !group_by_clause.is_empty() {
+            query.push_str(&group_by_clause);
         }
 
         query.push_str(
