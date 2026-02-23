@@ -135,7 +135,7 @@ pub struct Task {
     pub tags: Option<Vec<String>>,
     pub pid: Option<ID>,
     pub created: SystemTime,
-    pub completed: bool,
+    pub completed: Option<SystemTime>,
 }
 
 impl Display for Task {
@@ -143,7 +143,11 @@ impl Display for Task {
         writeln!(
             f,
             "{} Task: {}",
-            if self.completed { "✓" } else { "☐" },
+            if self.completed.is_some() {
+                "✓".green()
+            } else {
+                "✗".red()
+            },
             self.title
         )?;
 
@@ -173,6 +177,11 @@ impl Display for Task {
 
         let created: DateTime<Local> = self.created.into();
         writeln!(f, "  Created: {}", created.format("%H:%M:%S %d-%m-%Y"))?;
+
+        if let Some(time) = self.completed {
+            let completed: DateTime<Local> = time.into();
+            writeln!(f, "  Completed: {}", completed.format("%H:%M:%S %d-%m-%Y"))?;
+        }
 
         Ok(())
     }
@@ -208,7 +217,7 @@ impl Task {
             tags,
             pid,
             created: SystemTime::now(),
-            completed: false,
+            completed: None,
         };
 
         Ok(task)
@@ -318,7 +327,11 @@ impl TryFrom<&rusqlite::Row<'_>> for Task {
             created: DateTime::from_timestamp(created, 0)
                 .expect("invalid timestamp")
                 .into(),
-            completed: row.get(7)?,
+            completed: row.get::<_, Option<i64>>(7)?.map(|t| {
+                DateTime::from_timestamp(t, 0)
+                    .expect("invalid timestamp")
+                    .into()
+            }),
         })
     }
 }
@@ -366,7 +379,7 @@ impl Tabled for Task {
             Cow::Borrowed(&self.id.value[0..7]),
             Cow::Owned(pid),
             Cow::Owned(created_str),
-            Cow::Owned(if self.completed { "✓" } else { "" }.to_string()),
+            Cow::Owned(if self.completed.is_some() { "✓" } else { "" }.to_string()),
         ]
     }
 

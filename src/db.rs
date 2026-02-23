@@ -45,7 +45,7 @@ impl Database {
                 deadline INTEGER, 
                 parent_id TEXT,
                 created INTEGER NOT NULL,
-                completed BOOLEAN DEFAULT 0,
+                completed INTEGER,
                 FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
             );
             
@@ -84,11 +84,17 @@ impl Database {
     }
 
     pub fn add(&mut self, task: Task) -> Result<String> {
-        let timestamp = task
+        let created = task
             .created
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs() as i64;
+
+        let completed = task.completed.map(|t| {
+            t.duration_since(SystemTime::UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as i64
+        });
 
         let pid: Option<ID> = if let Some(parent_id) = task.pid {
             let p = parent_id.short();
@@ -120,8 +126,8 @@ impl Database {
                 task.difficulty,
                 task.deadline,
                 pid,
-                timestamp,
-                task.completed,
+                created,
+                completed,
             ],
         )?;
 
@@ -149,10 +155,16 @@ impl Database {
     }
 
     pub fn completed(&mut self, id: String) -> Result<String> {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs() as i64;
+
         let pattern = format!("{id}%");
+
         let n = self.conn.execute(
-            "UPDATE tasks SET completed = 1 WHERE id LIKE ?1",
-            [&pattern],
+            "UPDATE tasks SET completed = ?1 WHERE id LIKE ?2",
+            params![timestamp, &pattern],
         )?;
 
         if n == 0 {
@@ -203,8 +215,7 @@ impl Database {
             description = ?3,
             difficulty = ?4,
             deadline = ?5,
-            parent_id = ?6,
-            completed = ?7
+            parent_id = ?6
          WHERE id = ?1",
             params![
                 updates.id,
@@ -213,7 +224,6 @@ impl Database {
                 updates.difficulty,
                 updates.deadline,
                 updates.pid.map(|p| p.to_string()),
-                updates.completed
             ],
         )?;
 
@@ -251,7 +261,7 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, title, description, difficulty, deadline, parent_id, created, completed
          FROM tasks
-         WHERE completed = 0
+         WHERE completed IS NULL
          ORDER BY 
             CASE WHEN deadline IS NULL THEN 1 ELSE 0 END,  
             deadline ASC,
@@ -384,9 +394,9 @@ impl Database {
         }
 
         if only_completed {
-            conditions.push("t.completed = 1".to_string());
+            conditions.push("t.completed IS NOT NULL".to_string());
         } else if !all {
-            conditions.push("t.completed = 0".to_string());
+            conditions.push("t.completed IS NULL".to_string());
         }
 
         if !joins.is_empty() {
