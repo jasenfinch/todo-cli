@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use colored::Colorize;
+use rusqlite::ToSql;
 use std::fmt::Display;
 
 #[derive(Default, Debug)]
@@ -69,6 +70,12 @@ impl Deadline {
 impl Display for Deadline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.date.format("%Y-%m-%d"))
+    }
+}
+
+impl ToSql for Deadline {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.date.to_string().into())
     }
 }
 

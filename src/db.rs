@@ -1,9 +1,9 @@
 use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
-use rusqlite::Connection;
-use std::{fs, path::PathBuf};
+use rusqlite::{params, Connection};
+use std::{fs, path::PathBuf, time::SystemTime};
 
-use crate::task::Task;
+use crate::task::{self, Task, ID};
 
 pub struct Database {
     pub conn: Connection,
@@ -43,9 +43,9 @@ impl Database {
                 description TEXT,
                 difficulty INTEGER,
                 deadline INTEGER, 
-                completed BOOLEAN DEFAULT 0,
                 parent_id TEXT,
-                created_at INTEGER NOT NULL,
+                created INTEGER NOT NULL,
+                completed BOOLEAN DEFAULT 0,
                 FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
             );
             
@@ -84,26 +84,48 @@ impl Database {
     }
 
     pub fn add(&mut self, task: Task) -> Result<String> {
-        let (id, title, desc, diff, deadline, tags, mut pid, created, completed) =
-            task.translate_to_db();
+        let timestamp = task
+            .created
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs() as i64;
 
-        if pid.is_some() {
-            let parent_id = pid.unwrap();
-            let pattern = format!("{parent_id}%");
-            pid = self
-                .conn
+        let pid: Option<ID> = if let Some(parent_id) = task.pid {
+            let p = parent_id.short();
+            let pattern = format!("{p}%");
+            self.conn
                 .query_row("SELECT id FROM tasks WHERE id LIKE ?1", [&pattern], |row| {
                     row.get(0)
                 })
-                .context("Unable to find parent ID")?;
-        }
+                .context("Unable to find parent ID")?
+        } else {
+            None
+        };
 
         self.conn.execute(
-            "INSERT INTO tasks (id, title, description, difficulty, deadline, parent_id, created_at, completed) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            (&id,title,desc,diff,deadline,pid,created,completed),
+            "INSERT INTO tasks (
+                id,
+                title,
+                description,
+                difficulty,
+                deadline,
+                parent_id,
+                created,
+                completed
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                task.id,
+                task.title,
+                task.desc,
+                task.difficulty,
+                task.deadline,
+                pid,
+                timestamp,
+                task.completed,
+            ],
         )?;
 
-        let tags = tags.unwrap_or_default();
+        let tags = task.tags.unwrap_or_default();
 
         if !tags.is_empty() {
             for tag in tags {
@@ -118,12 +140,12 @@ impl Database {
 
                 self.conn.execute(
                     "INSERT INTO task_tags(task_id,tag_id) VALUES (?1,?2)",
-                    (&id, tag_id),
+                    params![task.id, tag_id],
                 )?;
             }
         }
 
-        Ok(id[0..7].to_string())
+        Ok(task.id.short())
     }
 
     pub fn completed(&mut self, id: String) -> Result<String> {
@@ -175,8 +197,6 @@ impl Database {
         updates.id = existing.id.clone();
         updates.created = existing.created;
 
-        let db_task = updates.translate_to_db();
-
         self.conn.execute(
             "UPDATE tasks SET 
             title = ?2,
@@ -186,19 +206,25 @@ impl Database {
             parent_id = ?6,
             completed = ?7
          WHERE id = ?1",
-            (
-                &db_task.0, &db_task.1, &db_task.2, &db_task.3, &db_task.4, &db_task.6, db_task.8,
-            ),
+            params![
+                updates.id,
+                updates.title,
+                updates.desc,
+                updates.difficulty,
+                updates.deadline,
+                updates.pid.map(|p| p.to_string()),
+                updates.completed
+            ],
         )?;
 
-        if let Some(new_tags) = db_task.5 {
-            self.update_task_tags(&db_task.0, &new_tags)?;
+        if let Some(new_tags) = updates.tags {
+            self.update_task_tags(&updates.id, &new_tags)?;
         }
 
         Ok(id)
     }
 
-    fn update_task_tags(&mut self, task_id: &str, tags: &[String]) -> Result<()> {
+    fn update_task_tags(&mut self, task_id: &task::ID, tags: &[String]) -> Result<()> {
         self.conn
             .execute("DELETE FROM task_tags WHERE task_id = ?1", [task_id])?;
 
@@ -223,7 +249,7 @@ impl Database {
 
     pub fn next(&self) -> Result<Task> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed
+            "SELECT id, title, description, difficulty, deadline, parent_id, created, completed
          FROM tasks
          WHERE completed = 0
          ORDER BY 
@@ -233,25 +259,9 @@ impl Database {
          LIMIT 1",
         )?;
 
-        let mut row = stmt.query_row([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-                row.get(7)?,
-                None,
-            ))
-        })?;
-
-        let tags = self.get_tags(&row.0)?;
-        if !tags.is_empty() {
-            row.8 = Some(tags);
-        }
-        let task = Task::translate_from_db(row)?;
+        let mut task = stmt.query_row([], |row| Task::try_from(row))?;
+        let tags = self.get_tags(&task.id.clone().into())?;
+        task.tags = Some(tags);
 
         Ok(task)
     }
@@ -325,29 +335,17 @@ impl Database {
 
     pub fn get_task(&self, id: String) -> Result<Task> {
         let pattern = format!("{id}%");
-        let mut row =
+        let mut task =
             self.conn
-                .query_row("SELECT id, title, description, difficulty, deadline, parent_id, created_at, completed FROM tasks WHERE id LIKE ?1", [&pattern], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                        row.get(6)?,
-                        row.get(7)?,
-                        None,
-                    ))
+                .query_row("SELECT id, title, description, difficulty, deadline, parent_id, created, completed FROM tasks WHERE id LIKE ?1", [&pattern], |row| {
+                    Task::try_from(row)
                 })
         .context(format!("No task found matching ID '{}'", id))?;
 
-        let tags = self.get_tags(&row.0)?;
-        if !tags.is_empty() {
-            row.8 = Some(tags);
-        }
+        let tags = self.get_tags(&task.id.clone().into())?;
+        task.tags = Some(tags);
 
-        Task::translate_from_db(row)
+        Ok(task)
     }
 
     pub fn get_tasks(
@@ -359,7 +357,7 @@ impl Database {
     ) -> Result<Vec<Task>> {
         let mut query = String::from(
             "SELECT DISTINCT t.id, t.title, t.description, t.difficulty, t.deadline, 
-                t.parent_id, t.created_at, t.completed
+                t.parent_id, t.created, t.completed
          FROM tasks t",
         );
 
@@ -409,29 +407,16 @@ impl Database {
         );
 
         let mut stmt = self.conn.prepare(&query)?;
-        let rows = stmt
+        let mut tasks = stmt
             .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                    row.get(6)?,
-                    row.get(7)?,
-                    None,
-                ))
+                Task::try_from(row)
+                // Task::from_row(row, Some(Vec::new()))
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut tasks = Vec::new();
-        for mut row in rows {
-            let tags = self.get_tags(&row.0)?;
-            if !tags.is_empty() {
-                row.8 = Some(tags);
-            }
-            tasks.push(Task::translate_from_db(row)?);
+        for task in tasks.iter_mut() {
+            let tags = self.get_tags(&task.id.clone().into())?;
+            task.tags = Some(tags);
         }
 
         Ok(tasks)

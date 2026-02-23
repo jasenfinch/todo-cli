@@ -3,6 +3,8 @@ use anyhow::{Result, anyhow};
 use chrono::{DateTime, Local};
 use colored::Colorize;
 use dialoguer::{Input, theme::ColorfulTheme};
+use rusqlite::ToSql;
+use rusqlite::types::FromSql;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::{fmt::Display, time::SystemTime};
@@ -25,6 +27,24 @@ impl From<String> for ID {
     }
 }
 
+impl From<ID> for String {
+    fn from(value: ID) -> Self {
+        value.value
+    }
+}
+
+impl ToSql for ID {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.value.clone().into())
+    }
+}
+
+impl FromSql for ID {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        Ok(ID::from(value.as_str()?.to_string()))
+    }
+}
+
 impl ID {
     fn new(task_title: &str) -> Self {
         let timestamp = SystemTime::now()
@@ -39,7 +59,7 @@ impl ID {
         }
     }
 
-    fn short(&self) -> String {
+    pub fn short(&self) -> String {
         self.value[0..7].to_string()
     }
 }
@@ -55,12 +75,6 @@ fn generate_hash(content: &str) -> String {
 #[derive(Debug, Clone, Copy)]
 pub struct Difficulty {
     value: u8,
-}
-
-impl Display for Difficulty {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.colour())
-    }
 }
 
 impl Difficulty {
@@ -84,6 +98,18 @@ impl Difficulty {
             9..=10 => s.red().bold().to_string(),
             _ => s.to_string(),
         }
+    }
+}
+
+impl Display for Difficulty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.colour())
+    }
+}
+
+impl ToSql for Difficulty {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.value.into())
     }
 }
 
@@ -257,77 +283,6 @@ impl Task {
         let task = Task::new(title, desc, difficulty, deadline, tags, pid)?;
         Ok(task)
     }
-
-    pub fn translate_to_db(
-        self,
-    ) -> (
-        String,
-        String,
-        Option<String>,
-        Option<u8>,
-        Option<String>,
-        Option<Vec<String>>,
-        Option<String>,
-        i64,
-        bool,
-    ) {
-        let timestamp = self
-            .created
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs() as i64;
-
-        (
-            self.id.value,
-            self.title,
-            self.desc,
-            self.difficulty.map(|d| d.into()),
-            self.deadline.map(|d| d.to_string()),
-            self.tags,
-            self.pid.map(|p| p.to_string()),
-            timestamp,
-            self.completed,
-        )
-    }
-
-    pub fn translate_from_db(
-        row: (
-            String,
-            String,
-            Option<String>,
-            Option<u8>,
-            Option<String>,
-            Option<String>,
-            i64,
-            bool,
-            Option<Vec<String>>,
-        ),
-    ) -> Result<Self> {
-        let diff = match row.3 {
-            Some(d) => Some(Difficulty::new(d)?),
-            None => None,
-        };
-
-        let deadline = match row.4 {
-            Some(d) => Some(Deadline::parse(&d)?),
-            None => None,
-        };
-
-        let created = DateTime::from_timestamp(row.6, 0)
-            .expect("Unable to parse created time stamp from the task db");
-
-        Ok(Self {
-            id: row.0.into(),
-            title: row.1,
-            desc: row.2,
-            difficulty: diff,
-            deadline,
-            tags: row.8,
-            pid: row.5.map(|p| p.into()),
-            created: created.into(),
-            completed: row.7,
-        })
-    }
 }
 
 fn truncate_string(s: &str, max_len: usize) -> String {
@@ -335,6 +290,36 @@ fn truncate_string(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
+impl TryFrom<&rusqlite::Row<'_>> for Task {
+    type Error = rusqlite::Error;
+
+    fn try_from(row: &rusqlite::Row<'_>) -> Result<Self, rusqlite::Error> {
+        let diff: Option<u8> = row.get(3)?;
+        let deadline: Option<String> = row.get(4)?;
+        let created: i64 = row.get(6)?;
+
+        Ok(Self {
+            id: row.get::<_, String>(0)?.into(),
+            title: row.get(1)?,
+            desc: row.get(2)?,
+            difficulty: diff
+                .map(Difficulty::new)
+                .transpose()
+                .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?,
+            deadline: deadline
+                .map(|d| Deadline::parse(&d))
+                .transpose()
+                .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?,
+            tags: None,
+            pid: row.get::<_, Option<String>>(5)?.map(Into::into),
+            created: DateTime::from_timestamp(created, 0)
+                .expect("invalid timestamp")
+                .into(),
+            completed: row.get(7)?,
+        })
     }
 }
 
