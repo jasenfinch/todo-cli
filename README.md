@@ -28,6 +28,12 @@ cd todo
 cargo install --path .
 ```
 
+### From GitHub
+
+```bash
+cargo install --git https://github.com/jasenfinch/todo-cli
+```
+
 ## Quick Start
 
 ```bash
@@ -129,6 +135,20 @@ todo list --tags work,urgent
 # Show subtasks of a parent
 todo list --pid abc1234
 
+# Show tasks before a deadline
+todo list --before friday
+todo list --before 2026-12-31
+
+# Show tasks after a deadline
+todo list --after today
+todo list --after +7d
+
+# Show tasks in a deadline range
+todo list --after today --before eow
+
+# Show overdue tasks
+todo list --before today
+
 # Show all tasks including completed
 todo list --all
 
@@ -227,8 +247,6 @@ todo remove --tags deprecated
 # Alias
 todo rm abc1234
 ```
-
-**Partial ID matching:** You only need to type enough characters to uniquely identify a task (e.g., `abc` instead of `abc1234`).
 
 ### Clearing All Tasks
 
