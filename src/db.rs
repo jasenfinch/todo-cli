@@ -84,16 +84,20 @@ impl Database {
     }
 
     pub fn add(&mut self, task: Task) -> Result<String> {
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         let created = task
             .created
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_secs() as i64;
+            .as_secs()
+            .cast_signed();
 
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         let completed = task.completed.map(|t| {
             t.duration_since(SystemTime::UNIX_EPOCH)
                 .expect("Time went backwards")
-                .as_secs() as i64
+                .as_secs()
+                .cast_signed()
         });
 
         let pid: Option<ID> = if let Some(parent_id) = task.pid {
@@ -155,10 +159,12 @@ impl Database {
     }
 
     pub fn completed(&mut self, id: String) -> Result<String> {
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_secs() as i64;
+            .as_secs()
+            .cast_signed();
 
         let pattern = format!("{id}%");
 
@@ -189,7 +195,7 @@ impl Database {
     }
 
     pub fn update(&mut self, id: String, mut updates: Task) -> Result<String> {
-        let existing = self.get_task(id.clone())?;
+        let existing = self.get_task(&id)?;
 
         if updates.title.is_empty() {
             updates.title = existing.title;
@@ -280,12 +286,12 @@ impl Database {
         let mut valid_ids = Vec::new();
 
         for id in ids {
-            match self.get_task(id.clone()) {
+            match self.get_task(&id) {
                 Ok(_) => valid_ids.push(id),
                 Err(e) => {
-                    eprintln!("Warning: {}", e)
+                    eprintln!("Warning: {e}");
                 }
-            };
+            }
         }
 
         let mut n = 0;
@@ -343,14 +349,14 @@ impl Database {
         Ok(tags)
     }
 
-    pub fn get_task(&self, id: String) -> Result<Task> {
+    pub fn get_task(&self, id: &str) -> Result<Task> {
         let pattern = format!("{id}%");
         let mut task =
             self.conn
                 .query_row("SELECT id, title, description, difficulty, deadline, parent_id, created, completed FROM tasks WHERE id LIKE ?1", [&pattern], |row| {
                     Task::try_from(row)
                 })
-        .context(format!("No task found matching ID '{}'", id))?;
+        .context(format!("No task found matching ID '{id}'"))?;
 
         let tags = self.get_tags(&task.id.clone().into())?;
         task.tags = Some(tags);
@@ -383,7 +389,7 @@ impl Database {
             joins.push("JOIN tags tg ON tt.tag_id = tg.id");
 
             let placeholders = tag_list.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-            conditions.push(format!("tg.name IN ({})", placeholders));
+            conditions.push(format!("tg.name IN ({placeholders})"));
 
             for tag in tag_list {
                 params.push(Box::new(tag.clone()));
@@ -398,7 +404,7 @@ impl Database {
         }
 
         if let Some(parent_id) = &pid {
-            let pattern = format!("{}%", parent_id);
+            let pattern = format!("{parent_id}%");
             conditions.push("t.parent_id LIKE ?".to_string());
             params.push(Box::new(pattern));
         }
@@ -438,7 +444,7 @@ impl Database {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        for task in tasks.iter_mut() {
+        for task in &mut tasks {
             let tags = self.get_tags(&task.id.clone().into())?;
             task.tags = Some(tags);
         }

@@ -51,7 +51,7 @@ pub enum Column {
 }
 
 impl Column {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Column::Id => "ID",
             Column::Task => "Task",
@@ -81,8 +81,8 @@ impl Column {
 }
 
 pub fn list_tasks(
-    db: Database,
-    view: ViewMode,
+    db: &Database,
+    view: &ViewMode,
     columns: Option<Vec<Column>>,
     tags: Option<Vec<String>>,
     pid: Option<String>,

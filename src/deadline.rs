@@ -15,9 +15,9 @@ impl Deadline {
         if days_until < 0 {
             format!("{} days ago", -days_until).red().to_string()
         } else {
-            let mut res = format!("in {} days", days_until).to_string();
+            let mut res = format!("in {days_until} days").to_string();
             if res == "in 0 days" {
-                res = res.red().to_string()
+                res = res.red().to_string();
             }
             res
         }
@@ -80,9 +80,10 @@ impl ToSql for Deadline {
 }
 
 fn next_weekday(from: NaiveDate, target: chrono::Weekday) -> NaiveDate {
-    let days_ahead =
-        (target.num_days_from_monday() as i64 - from.weekday().num_days_from_monday() as i64 + 7)
-            % 7;
+    let days_ahead = (i64::from(target.num_days_from_monday())
+        - i64::from(from.weekday().num_days_from_monday())
+        + 7)
+        % 7;
 
     if days_ahead == 0 {
         from + Duration::days(7)
@@ -92,7 +93,7 @@ fn next_weekday(from: NaiveDate, target: chrono::Weekday) -> NaiveDate {
 }
 
 fn end_of_week(date: NaiveDate) -> NaiveDate {
-    let days_until_sunday = (6 - date.weekday().num_days_from_monday()) as i64;
+    let days_until_sunday = i64::from(6 - date.weekday().num_days_from_monday());
     date + Duration::days(days_until_sunday)
 }
 
@@ -118,7 +119,7 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 }
 
 fn parse_relative_duration(input: &str) -> Option<i64> {
-    let cleaned = input.replace("in ", "").replace("+", "").trim().to_string();
+    let cleaned = input.replace("in ", "").replace('+', "").trim().to_string();
 
     if let Some(num_str) = cleaned
         .strip_suffix('d')
