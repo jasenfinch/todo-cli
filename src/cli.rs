@@ -1,7 +1,13 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
+use dialoguer::Confirm;
 use std::path::PathBuf;
 
-use crate::display;
+use crate::{
+    db::Database,
+    display::{list_tasks, Column, ViewMode},
+    task::Task,
+};
 
 #[derive(Debug, Parser)]
 #[command(author,version,about = "A task management and productivity CLI tool",long_about = None)]
@@ -128,10 +134,10 @@ pub enum Commands {
     #[command(alias = "ls", about = "List tasks")]
     List {
         #[arg(short, long, default_value = "compact")]
-        view: display::ViewMode,
+        view: ViewMode,
 
         #[arg(short, long, value_delimiter = ',', conflicts_with = "view")]
-        columns: Option<Vec<display::Column>>,
+        columns: Option<Vec<Column>>,
 
         /// Show only tasks with specific tags
         #[arg(short, long, value_delimiter = ',', conflicts_with = "pid")]
@@ -169,4 +175,116 @@ pub enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+}
+
+impl Commands {
+    pub fn add(
+        mut db: Database,
+        title: Option<String>,
+        description: Option<String>,
+        difficulty: Option<u8>,
+        deadline: Option<String>,
+        tags: Option<Vec<String>>,
+        pid: Option<String>,
+    ) -> Result<()> {
+        let task: Task;
+        if let Some(t) = title {
+            task = Task::new(t, description, difficulty, deadline, tags, pid)?;
+        } else {
+            task = Task::interactive()?;
+        }
+        let id = db.add(task)?;
+        println!("Added task with ID {id}");
+        Ok(())
+    }
+
+    pub fn complete(mut db: Database, id: String) -> Result<()> {
+        let id = db.completed(id)?;
+        println!("Task with ID {id} marked as complete");
+        Ok(())
+    }
+
+    pub fn update(
+        mut db: Database,
+        id: String,
+        title: Option<String>,
+        description: Option<String>,
+        difficulty: Option<u8>,
+        deadline: Option<String>,
+        tags: Option<Vec<String>>,
+        pid: Option<String>,
+    ) -> Result<()> {
+        let mut task_title = "".to_string();
+
+        if let Some(t) = title {
+            task_title = t
+        }
+
+        let task = Task::new(task_title, description, difficulty, deadline, tags, pid)?;
+
+        let id = db.update(id, task)?;
+        println!("Updated task with ID {id}");
+        Ok(())
+    }
+
+    pub fn next(db: Database) -> Result<()> {
+        let task = db.next()?;
+        println!("{}", task);
+        Ok(())
+    }
+
+    pub fn show(db: Database, id: String) -> Result<()> {
+        let task = db.get_task(&id)?;
+        println!("{}", task);
+        Ok(())
+    }
+
+    pub fn list(
+        db: Database,
+        view: ViewMode,
+        columns: Option<Vec<Column>>,
+        tags: Option<Vec<String>>,
+        pid: Option<String>,
+        all: bool,
+        completed: bool,
+    ) -> Result<()> {
+        list_tasks(&db, &view, columns, tags, pid, all, completed)?;
+        Ok(())
+    }
+
+    pub fn remove(
+        mut db: Database,
+        ids: Option<Vec<String>>,
+        tags: Option<Vec<String>>,
+    ) -> Result<()> {
+        let n = match (ids, tags) {
+            (Some(ids), None) => db.remove_ids(ids)?,
+            (None, Some(tags)) => db.remove_tags(tags)?,
+            _ => unreachable!("clap enforces exactly one is present"),
+        };
+        println!("Removed {} task(s)", n);
+        Ok(())
+    }
+
+    pub fn tags(db: Database) -> Result<()> {
+        let tags = db.tags()?;
+        println!("{}", tags.join("  "));
+        Ok(())
+    }
+
+    pub fn clear(db: Database, force: bool) -> Result<()> {
+        let mut confirm = true;
+
+        if !force {
+            confirm = Confirm::new()
+                .with_prompt("Are you sure you want to clear ALL tasks? This cannot be undone.")
+                .default(false)
+                .interact()?;
+        }
+
+        if confirm {
+            db.clear()?;
+        }
+        Ok(())
+    }
 }
