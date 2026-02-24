@@ -132,6 +132,16 @@ pub enum Commands {
     #[command(about = "Show information about a task")]
     Show { id: String },
     #[command(alias = "ls", about = "List tasks")]
+    #[command(after_help = r"DEADLINE FORMATS:
+  Keywords: today, tomorrow, friday
+  Relative: +5d, +2w, +1m
+  Special:  eow, eom, eoy
+  Exact:    2026-02-10
+
+EXAMPLES:
+  todo list --before friday
+  todo list --after today --before eow
+  todo list --tags work --before +7d")]
     List {
         #[arg(short, long, default_value = "compact")]
         view: ViewMode,
@@ -146,6 +156,14 @@ pub enum Commands {
         /// Show only the task with parent ID along with its child tasks
         #[arg(short, long, conflicts_with = "tags")]
         pid: Option<String>,
+
+        /// Show tasks due before this date (see deadline formats in --help)
+        #[arg(long, value_name = "DEADLINE")]
+        before: Option<String>,
+
+        /// Show tasks due after this date (see deadline formats in --help)
+        #[arg(long, value_name = "DEADLINE")]
+        after: Option<String>,
 
         /// Show all tasks including completed
         #[arg(long, conflicts_with = "completed")]
@@ -245,10 +263,14 @@ impl Commands {
         columns: Option<Vec<Column>>,
         tags: Option<Vec<String>>,
         pid: Option<String>,
+        before: Option<String>,
+        after: Option<String>,
         all: bool,
         completed: bool,
     ) -> Result<()> {
-        list_tasks(&db, &view, columns, tags, pid, all, completed)?;
+        list_tasks(
+            &db, &view, columns, tags, pid, before, after, all, completed,
+        )?;
         Ok(())
     }
 

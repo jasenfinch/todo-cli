@@ -1,4 +1,4 @@
-use crate::db::Database;
+use crate::{db::Database, deadline::Deadline};
 use anyhow::Result;
 use clap::ValueEnum;
 use tabled::{
@@ -86,10 +86,23 @@ pub fn list_tasks(
     columns: Option<Vec<Column>>,
     tags: Option<Vec<String>>,
     pid: Option<String>,
+    before: Option<String>,
+    after: Option<String>,
     include_completed: bool,
     completed: bool,
 ) -> Result<()> {
-    let tasks = db.get_tasks(tags, pid, include_completed, completed)?;
+    let before_date = before.map(|s| Deadline::parse(&s)).transpose()?;
+
+    let after_date = after.map(|s| Deadline::parse(&s)).transpose()?;
+
+    let tasks = db.get_tasks(
+        tags,
+        pid,
+        before_date,
+        after_date,
+        include_completed,
+        completed,
+    )?;
 
     if tasks.is_empty() {
         println!("No tasks found");

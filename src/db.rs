@@ -3,7 +3,10 @@ use directories::ProjectDirs;
 use rusqlite::{Connection, params};
 use std::{fs, path::PathBuf, time::SystemTime};
 
-use crate::task::{self, ID, Task};
+use crate::{
+    deadline::Deadline,
+    task::{ID, Task},
+};
 
 pub struct Database {
     pub conn: Connection,
@@ -240,7 +243,7 @@ impl Database {
         Ok(id)
     }
 
-    fn update_task_tags(&mut self, task_id: &task::ID, tags: &[String]) -> Result<()> {
+    fn update_task_tags(&mut self, task_id: &ID, tags: &[String]) -> Result<()> {
         self.conn
             .execute("DELETE FROM task_tags WHERE task_id = ?1", [task_id])?;
 
@@ -368,6 +371,8 @@ impl Database {
         &self,
         tags: Option<Vec<String>>,
         pid: Option<String>,
+        before: Option<Deadline>,
+        after: Option<Deadline>,
         all: bool,
         only_completed: bool,
     ) -> Result<Vec<Task>> {
@@ -407,6 +412,18 @@ impl Database {
             let pattern = format!("{parent_id}%");
             conditions.push("t.parent_id LIKE ?".to_string());
             params.push(Box::new(pattern));
+        }
+
+        if let Some(deadline) = &before {
+            conditions.push("t.deadline IS NOT NULL".to_string());
+            conditions.push("t.deadline <= ?".to_string());
+            params.push(Box::new(deadline.to_string()));
+        }
+
+        if let Some(deadline) = &after {
+            conditions.push("t.deadline IS NOT NULL".to_string());
+            conditions.push("t.deadline >= ?".to_string());
+            params.push(Box::new(deadline.to_string()));
         }
 
         if only_completed {

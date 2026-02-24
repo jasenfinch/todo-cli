@@ -218,6 +218,77 @@ fn test_list_filter_by_parent() {
 }
 
 #[test]
+fn test_list_before_deadline() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Add tasks with various deadlines
+    add_task(&temp_dir, &["Due today", "--deadline", "today"]);
+    add_task(&temp_dir, &["Due tomorrow", "--deadline", "tomorrow"]);
+    add_task(&temp_dir, &["Due in week", "--deadline", "+7d"]);
+    add_task(&temp_dir, &["Due in month", "--deadline", "+30d"]);
+
+    // List tasks due before +10d (should include today, tomorrow, +7d)
+    let output = todo_cmd(&temp_dir)
+        .args(["list", "--before", "+10d"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Due today"));
+    assert!(stdout.contains("Due tomorrow"));
+    assert!(stdout.contains("Due in week"));
+    assert!(!stdout.contains("Due in month"));
+}
+
+#[test]
+fn test_list_after_deadline() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Add tasks with various deadlines
+    add_task(&temp_dir, &["Due today", "--deadline", "today"]);
+    add_task(&temp_dir, &["Due tomorrow", "--deadline", "tomorrow"]);
+    add_task(&temp_dir, &["Due in week", "--deadline", "+7d"]);
+    add_task(&temp_dir, &["Due in month", "--deadline", "+30d"]);
+
+    // List tasks due after +5d (should include +7d and +30d)
+    let output = todo_cmd(&temp_dir)
+        .args(["list", "--after", "+5d"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains("Due today"));
+    assert!(!stdout.contains("Due tomorrow"));
+    assert!(stdout.contains("Due in week"));
+    assert!(stdout.contains("Due in month"));
+}
+
+#[test]
+fn test_list_deadline_range() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Add tasks with various deadlines
+    add_task(&temp_dir, &["Due today", "--deadline", "today"]);
+    add_task(&temp_dir, &["Due in 3 days", "--deadline", "+3d"]);
+    add_task(&temp_dir, &["Due in 7 days", "--deadline", "+7d"]);
+    add_task(&temp_dir, &["Due in 14 days", "--deadline", "+14d"]);
+    add_task(&temp_dir, &["Due in 30 days", "--deadline", "+30d"]);
+
+    // List tasks due between +2d and +10d
+    let output = todo_cmd(&temp_dir)
+        .args(["list", "--after", "+2d", "--before", "+10d"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains("Due today"));
+    assert!(stdout.contains("Due in 3 days"));
+    assert!(stdout.contains("Due in 7 days"));
+    assert!(!stdout.contains("Due in 14 days"));
+    assert!(!stdout.contains("Due in 30 days"));
+}
+
+#[test]
 fn test_list_all() {
     let temp_dir = TempDir::new().unwrap();
 
