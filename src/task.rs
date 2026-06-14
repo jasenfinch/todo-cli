@@ -343,6 +343,13 @@ impl Tabled for Task {
         let created: DateTime<Local> = self.created.into();
         let created_str = created.format("%d-%m-%Y").to_string();
 
+        let completed_str: String = if let Some(time) = self.completed {
+            let time: DateTime<Local> = time.into();
+            time.format("%d-%m-%Y").to_string()
+        } else {
+            "".to_string()
+        };
+
         let pid = match &self.pid {
             Some(p) => p.short(),
             None => "".to_string(),
@@ -379,7 +386,7 @@ impl Tabled for Task {
             Cow::Borrowed(&self.id.value[0..7]),
             Cow::Owned(pid),
             Cow::Owned(created_str),
-            Cow::Owned(if self.completed.is_some() { "✓" } else { "" }.to_string()),
+            Cow::Owned(completed_str),
         ]
     }
 
