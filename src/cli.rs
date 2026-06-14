@@ -99,6 +99,8 @@ pub enum Commands {
     },
     #[command(alias = "done", about = "Mark a task as complete")]
     Complete { id: String },
+    #[command(alias = "undo", about = "Mark a completed task as incomplete")]
+    Incomplete { id: String },
     #[command(about = "Update a task (only specified fields are changed)")]
     Update {
         id: String,
@@ -219,6 +221,12 @@ impl Commands {
     pub fn complete(mut db: Database, id: String) -> Result<()> {
         let id = db.completed(id)?;
         println!("Task with ID {id} marked as complete");
+        Ok(())
+    }
+
+    pub fn incomplete(mut db: Database, id: String) -> Result<()> {
+        let id = db.incomplete(id)?;
+        println!("Completed task with ID {id} is marked as incomplete");
         Ok(())
     }
 

@@ -183,6 +183,28 @@ impl Database {
         Ok(id)
     }
 
+    pub fn incomplete(&mut self, id: String) -> Result<String> {
+        let pattern = format!("{id}%");
+
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE id LIKE ?1",
+            params![&pattern],
+            |row| row.get(0),
+        )?;
+        if count == 0 {
+            bail!("No task found matching '{id}'");
+        }
+
+        let n = self.conn.execute(
+            "UPDATE tasks SET completed = NULL WHERE id LIKE ?1 AND completed IS NOT NULL",
+            params![&pattern],
+        )?;
+        if n == 0 {
+            bail!("Task '{id}' is not completed");
+        }
+        Ok(id)
+    }
+
     pub fn tags(&self) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT tags.name 

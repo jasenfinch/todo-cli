@@ -209,6 +209,9 @@ todo complete abc1234
 
 # Alias
 todo done abc1234
+
+# Mark completed task as incomplete
+todo incomplete abc1234
 ```
 
 ### Viewing Task Details
@@ -355,6 +358,7 @@ todo list --columns title,difficulty,deadline,tags
 | `show` | - | Show detailed information about a task |
 | `update` | - | Update task fields |
 | `complete` | `done` | Mark a task as complete |
+| `incomplete` | `undo` | Mark a completed task as incomplete |
 | `next` | - | Show the highest-priority task |
 | `tags` | - | List all tags in use |
 | `remove` | `rm` | Remove tasks by ID or tag |

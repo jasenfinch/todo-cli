@@ -19,6 +19,7 @@ fn main() -> Result<()> {
             pid,
         } => Commands::add(db, title, description, difficulty, deadline, tags, pid)?,
         Commands::Complete { id } => Commands::complete(db, id)?,
+        Commands::Incomplete { id } => Commands::incomplete(db, id)?,
         Commands::Update {
             id,
             title,

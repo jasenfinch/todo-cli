@@ -462,6 +462,56 @@ fn test_complete_partial_id() {
 }
 
 // ============================================================================
+// INCOMPLETE COMMAND TESTS
+// ============================================================================
+#[test]
+fn test_incomplete_task() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let id = add_task(&temp_dir, &["Task"]);
+
+    todo_cmd(&temp_dir)
+        .args(["complete", &id])
+        .assert()
+        .success();
+
+    todo_cmd(&temp_dir)
+        .args(["incomplete", &id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("marked as incomplete"));
+
+    // Verify it appears in default list again
+    todo_cmd(&temp_dir)
+        .arg("list")
+        .assert()
+        .stdout(predicate::str::contains("Task"));
+}
+
+#[test]
+fn test_incomplete_alias() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let id = add_task(&temp_dir, &["Task"]);
+
+    todo_cmd(&temp_dir)
+        .args(["complete", &id])
+        .assert()
+        .success();
+    todo_cmd(&temp_dir).args(["undo", &id]).assert().success();
+}
+
+#[test]
+fn test_incomplete_nonexistent_task() {
+    let temp_dir = TempDir::new().unwrap();
+
+    todo_cmd(&temp_dir)
+        .args(["incomplete", "nonexistent"])
+        .assert()
+        .failure();
+}
+
+// ============================================================================
 // UPDATE COMMAND TESTS
 // ============================================================================
 
